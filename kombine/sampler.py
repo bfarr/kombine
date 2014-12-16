@@ -160,5 +160,6 @@ class Sampler(object):
             # Update the proposal at the requested interval
             if self.iterations % update_interval == 0:
                 self._kde = OptimizedKDE(p, self._pool)
+                lnq = self._kde(p)
 
         return p, lnprior, lnlike, lnq
