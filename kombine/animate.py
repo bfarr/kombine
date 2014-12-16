@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 import numpy as np
-
 from matplotlib import animation
+
 import triangle
 
 
 def anim_to_html(anim):
     """
     Function to help with inline animations in ipython notebooks.
+
+    This  first appeared as a blog post on Pythonic Perambulations:
+    https://jakevdp.github.io/blog/2013/05/12/embedding-matplotlib-animations/
     """
     from tempfile import NamedTemporaryFile
 
@@ -29,7 +32,7 @@ def animate_triangle(pos_T, labels=None, truths=None,
                      samps_per_frame=10, fps=30,
                      rough_length=10.0, outname='triangle.mp4'):
     """
-    Animate a corner plot.
+    Animate a triangle corner plot.
 
     :param pos_T:
     A ``T x N x dim`` array, containing ``T`` timesteps of ``N`` evolving

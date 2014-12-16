@@ -163,3 +163,11 @@ class Sampler(object):
                 lnq = self._kde(p)
 
         return p, lnprior, lnlike, lnq
+
+    def animate(self, labels=None):
+        from .animate import animate_triangle
+
+        if not labels:
+            labels = [r'$x_{}$'.format(i) for i in range(self.dim)]
+
+        return animate_triangle(self._chain, labels=labels)
