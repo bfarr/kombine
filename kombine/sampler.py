@@ -1,5 +1,4 @@
 import numpy as np
-import multiprocessing as mp
 
 from .clustered_kde import OptimizedKDE
 
