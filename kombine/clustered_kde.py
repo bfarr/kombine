@@ -25,8 +25,11 @@ class OptimizedKDE(object):
 
         k = 1
         while True:
-            kde = ClusteredKDE(data, k, pool)
-            bic = kde.bic()
+            try:
+                kde = ClusteredKDE(data, k, pool)
+                bic = kde.bic()
+            except la.LinAlgError:
+                bic = -np.inf
 
             if (bic > best_bic):
                 best_kde = kde
