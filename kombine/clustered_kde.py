@@ -161,33 +161,29 @@ class KDE(object):
         Use Scott's rule to set the kernel bandwidth.  Also store Cholesky
         decomposition for later.
         """
-        kernel_cov = self._cov * self._N ** (-2./(self._dim + 4))
+        self._kernel_cov = self._cov * self._N ** (-2./(self._dim + 4))
 
         # Used to evaluate PDF with cho_solve()
-        self._cho_factor = la.cho_factor(kernel_cov)
-
-        # Used for drawing samples
-        self._decomposed_kernel_cov = la.cholesky(kernel_cov)
+        self._cho_factor = la.cho_factor(self._kernel_cov)
 
         # Make sure the estimated PDF integrates to 1.0
         self._lognorm = np.log(
-            self._N * np.sqrt((2*np.pi ** self._dim) * la.det(kernel_cov)))
+            self._N * np.sqrt((2*np.pi ** self._dim) *
+                              la.det(self._kernel_cov)))
 
     def draw(self, N=1):
         """
         Draw samples from the estimated distribution.
         """
-        # Draw from a unit Gaussian
-        X = np.random.normal(size=(N, self._dim))
+        # Draw vanilla samples from a zero-mean multivariate Gaussian
+        X = np.random.multivariate_normal(np.zeros(self._dim),
+                                          self._kernel_cov, size=N)
 
-        # Pick N random kernels
+        # Pick N random kernels as means
         kernels = np.random.randint(0, self._N, N)
 
-        # Recolor unit draws with the selected kernels
-        draws = np.dot(self._decomposed_kernel_cov, X.T).T + \
-            self._data[kernels]
-
-        return draws
+        # Shift vanilla draws to be about chosen kernels
+        return self._data[kernels] + X
 
     def logpdf(self, X):
         N, dim = X.shape
