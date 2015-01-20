@@ -167,7 +167,8 @@ class KDE(object):
         self._cho_factor = la.cho_factor(self._kernel_cov)
 
         # Make sure the estimated PDF integrates to 1.0
-        self._lognorm = self._dim/2.0*np.log(2.0*np.pi) + np.log(self_N) + np.sum(np.log(np.diag(self._cho_factor)))
+        self._lognorm = self._dim/2.0 * np.log(2.0*np.pi) + np.log(self._N) +\
+            np.sum(np.log(np.diag(self._cho_factor[0])))
 
     def draw(self, N=1):
         """
