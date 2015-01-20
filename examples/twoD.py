@@ -25,12 +25,14 @@ x = np.arange(lower_left[0], upper_right[0], 1)
 y = np.arange(lower_left[1], upper_right[1], 1)
 f = RectBivariateSpline(x, y, img)
 
+
 # Use a uniform (bounded) prior
 def lnprior(X):
     if np.any(X < lower_left) or np.any(X > upper_right):
         return np.NINF
     else:
         return 0.0
+
 
 # Use a softened version of the interpolant as a likelihood
 def lnlike(X):

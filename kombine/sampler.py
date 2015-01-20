@@ -2,12 +2,13 @@ import numpy as np
 
 from .clustered_kde import optimized_kde
 
+
 class GetLnProbWrapper(object):
     def __init__(self, lnlike, lnprior, kde):
         self.lnlike = lnlike
         self.lnprior = lnprior
         self.kde = kde
-        
+
     def __call__(self, x):
         lnprior = self.lnprior(x)
         if lnprior == np.NINF:
@@ -18,7 +19,7 @@ class GetLnProbWrapper(object):
             kde = self.kde(x)
 
         return np.array([lnlike, lnprior, kde])
-        
+
 
 class Sampler(object):
     """
@@ -124,10 +125,12 @@ class Sampler(object):
                 m = map
             else:
                 m = self._pool.map
-            results = np.array(m(GetLnProbWrapper(self._get_lnlike, self._get_lnprior, self._kde), p))
-            lnlike = results[:,0]
-            lnprior = results[:,1]
-            lnq = results[:,2]
+            results = np.array(m(GetLnProbWrapper(self._get_lnlike,
+                                                  self._get_lnprior,
+                                                  self._kde), p))
+            lnlike = results[:, 0]
+            lnprior = results[:, 1]
+            lnq = results[:, 2]
 
         # Prepare arrays for storage ahead of time
         self._chain = np.concatenate(
@@ -149,10 +152,12 @@ class Sampler(object):
                 m = map
             else:
                 m = self._pool.map
-            results = np.array(m(GetLnProbWrapper(self._get_lnlike, self._get_lnprior, self._kde), p_p))
-            lnlike_p = results[:,0]
-            lnprior_p = results[:,1]
-            lnq_p = results[:,2]
+            results = np.array(m(GetLnProbWrapper(self._get_lnlike,
+                                                  self._get_lnprior,
+                                                  self._kde), p_p))
+            lnlike_p = results[:, 0]
+            lnprior_p = results[:, 1]
+            lnq_p = results[:, 2]
 
             # Calculate the (ln) Metropolis-Hastings ration
             ln_mh_ratio = lnprior_p + lnlike_p - lnprior - lnlike + lnq - lnq_p

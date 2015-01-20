@@ -37,7 +37,7 @@ def optimized_kde(data, pool=None):
         k += 1
 
     return best_kde
-    
+
 
 class ClusteredKDE(object):
     """
