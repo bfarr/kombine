@@ -1,7 +1,24 @@
 import numpy as np
 
-from .clustered_kde import OptimizedKDE
+from .clustered_kde import optimized_kde
 
+class GetLnProbWrapper(object):
+    def __init__(self, lnlike, lnprior, kde):
+        self.lnlike = lnlike
+        self.lnprior = lnprior
+        self.kde = kde
+        
+    def __call__(self, x):
+        lnprior = self.lnprior(x)
+        if lnprior == np.NINF:
+            lnlike = 0.0
+            kde = 0.0
+        else:
+            lnlike = self.lnlike(x)
+            kde = self.kde(x)
+
+        return np.array([lnlike, lnprior, kde])
+        
 
 class Sampler(object):
     """
@@ -96,20 +113,21 @@ class Sampler(object):
 
         # Build a proposal if one doesn'g already exist
         if self._kde is None:
-            self._kde = OptimizedKDE(p, self._pool)
+            self._kde = optimized_kde(p, pool=self._pool)
 
         lnprior = lnprior0
         lnlike = lnlike0
         lnq = lnq0
 
-        if lnprior is None:
-            lnprior = self._get_lnprior(p)
-
-        if lnlike is None:
-            lnlike = self._get_lnlike(p)
-
-        if lnq is None:
-            lnq = self._kde(p)
+        if lnprior is None or lnlike is None or lnq is None:
+            if self._pool is None:
+                m = map
+            else:
+                m = self._pool.map
+            results = np.array(m(GetLnProbWrapper(self._get_lnlike, self._get_lnprior, self._kde), p))
+            lnlike = results[:,0]
+            lnprior = results[:,1]
+            lnq = results[:,2]
 
         # Prepare arrays for storage ahead of time
         self._chain = np.concatenate(
@@ -127,9 +145,14 @@ class Sampler(object):
 
             # Calculate the prior, likelihood, and proposal density
             # at the proposed locations
-            lnprior_p = self._get_lnprior(p_p)
-            lnlike_p = self._get_lnlike(p_p)
-            lnq_p = self._kde(p_p)
+            if self._pool is None:
+                m = map
+            else:
+                m = self._pool.map
+            results = np.array(m(GetLnProbWrapper(self._get_lnlike, self._get_lnprior, self._kde), p_p))
+            lnlike_p = results[:,0]
+            lnprior_p = results[:,1]
+            lnq_p = results[:,2]
 
             # Calculate the (ln) Metropolis-Hastings ration
             ln_mh_ratio = lnprior_p + lnlike_p - lnprior - lnlike + lnq - lnq_p
@@ -159,7 +182,7 @@ class Sampler(object):
 
             # Update the proposal at the requested interval
             if self.iterations % update_interval == 0:
-                self._kde = OptimizedKDE(p, self._pool)
+                self._kde = optimized_kde(p, pool=self._pool)
 
         return p, lnprior, lnlike, lnq
 

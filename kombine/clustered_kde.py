@@ -6,48 +6,38 @@ from scipy.cluster.vq import kmeans, vq
 import multiprocessing as mp
 
 
-class OptimizedKDE(object):
+def optimized_kde(data, pool=None):
     """
     Iteratively run a k-means clustering algorithm, estimating the distibution
     of each identified cluster with an independent kernel density estimate.
     Starting with k = 1, the distribution is estimated and the Bayes
     Information criterion (BIC) is calculated.  k is increased until the BIC
-    stops increasing.  All methods of the ClusteredKDE class are then
-    inherited.
+    stops increasing.  Returns the KDE with the best BIC.
 
     :param data:
         An N x ndim array, containing N samples from the target distribution.
 
     """
-    def __init__(self, data, pool=None):
-        best_bic = -np.inf
-        best_kde = None
+    best_bic = -np.inf
+    best_kde = None
 
-        k = 1
-        while True:
-            try:
-                kde = ClusteredKDE(data, k, pool)
-                bic = kde.bic()
-            except la.LinAlgError:
-                bic = -np.inf
+    k = 1
+    while True:
+        try:
+            kde = ClusteredKDE(data, k)
+            bic = kde.bic(pool=pool)
+        except la.LinAlgError:
+            bic = -np.inf
 
-            if (bic > best_bic):
-                best_kde = kde
-                best_bic = bic
-            else:
-                break
-            k += 1
+        if (bic > best_bic):
+            best_kde = kde
+            best_bic = bic
+        else:
+            break
+        k += 1
 
-        self.kde = best_kde
-
-    def __getattr__(self, attr):
-        return getattr(self.kde, attr)
-
-    def logpdf(self, X):
-        return self.kde(X)
-
-    __call__ = logpdf
-
+    return best_kde
+    
 
 class ClusteredKDE(object):
     """
@@ -63,7 +53,7 @@ class ClusteredKDE(object):
         The number of clusters to use in the k-means clustering.
 
     """
-    def __init__(self, data, k=1, pool=None):
+    def __init__(self, data, k=1):
         N, dim = data.shape
         self._N = N
         self._dim = dim
@@ -76,7 +66,7 @@ class ClusteredKDE(object):
         self._centroids, _ = kmeans(self._data, k)
         self._assignments, _ = vq(self._data, self._centroids)
 
-        self._kdes = [KDE(self._data[self._assignments == c], pool=pool)
+        self._kdes = [KDE(self._data[self._assignments == c])
                       for c in range(k)]
         self._logweights = np.log(
             [np.sum(self._assignments == c)/float(self._N) for c in range(k)])
@@ -93,8 +83,8 @@ class ClusteredKDE(object):
 
         return self._color(draws)
 
-    def _whitened_logpdf(self, X):
-        logpdfs = [logweight + kde(X)
+    def _whitened_logpdf(self, X, pool=None):
+        logpdfs = [logweight + kde(X, pool=pool)
                    for logweight, kde in zip(self._logweights, self._kdes)]
         return logsumexp(logpdfs, axis=0)
 
@@ -107,8 +97,8 @@ class ClusteredKDE(object):
     def _color(self, data):
         return data * self._std + self._mean
 
-    def bic(self):
-        log_l = np.sum(self._whitened_logpdf(self._data))
+    def bic(self, pool=None):
+        log_l = np.sum(self._whitened_logpdf(self._data, pool=pool))
 
         # Determine the total number of parameters in clustered-KDE
         # Account for centroid locations
@@ -141,12 +131,11 @@ class KDE(object):
         An N x ndim array, containing N samples from the target distribution.
 
     """
-    def __init__(self, data, pool=None):
+    def __init__(self, data):
         N, dim = data.shape
         self._N = N
         self._dim = dim
         self._data = data
-        self._pool = pool
 
         self._mean = np.mean(data, axis=0)
         self._cov = np.cov(data, rowvar=0)
@@ -184,13 +173,15 @@ class KDE(object):
         # Shift vanilla draws to be about chosen kernels
         return self._data[kernels] + X
 
-    def logpdf(self, X):
+    def logpdf(self, X, pool=None):
+        X = np.atleast_2d(X)
+
         N, dim = X.shape
         assert dim == self._dim
 
         # Apply across the pool if it exists
-        if self._pool:
-            M = self._pool.map
+        if pool:
+            M = pool.map
         else:
             M = map
 

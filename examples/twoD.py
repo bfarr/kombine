@@ -25,18 +25,16 @@ x = np.arange(lower_left[0], upper_right[0], 1)
 y = np.arange(lower_left[1], upper_right[1], 1)
 f = RectBivariateSpline(x, y, img)
 
-
 # Use a uniform (bounded) prior
 def lnprior(X):
-    res = -np.inf*np.ones(len(X))
-    sel = (X[:, 0] > lower_left[0]) & (X[:, 0] < upper_right[0])
-    sel = sel & (X[:, 1] > lower_left[1]) & (X[:, 1] < upper_right[1])
-    res[sel] = np.ones(np.sum(sel))
-    return res
+    if np.any(X < lower_left) or np.any(X > upper_right):
+        return np.NINF
+    else:
+        return 0.0
 
 # Use a softened version of the interpolant as a likelihood
-lnlike = lambda X: -3.5*np.log(f(X[:, 0], X[:, 1], grid=False))
-
+def lnlike(X):
+    return -3.5*np.log(f(X[0], X[1], grid=False))
 
 # Construct a pool if multiprocessing is available
 try:
