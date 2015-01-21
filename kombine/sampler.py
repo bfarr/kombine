@@ -4,19 +4,19 @@ from .clustered_kde import optimized_kde
 
 
 class GetLnProbWrapper(object):
-    def __init__(self, lnlike, lnprior, kde):
-        self.lnlike = lnlike
+    def __init__(self, lnprior, lnlike, kde):
         self.lnprior = lnprior
+        self.lnlike = lnlike
         self.kde = kde
 
-    def __call__(self, x):
-        lnprior = self.lnprior(x)
+    def __call__(self, p):
+        lnprior = self.lnprior(p)
         if lnprior == np.NINF:
             lnlike = 0.0
             kde = 0.0
         else:
-            lnlike = self.lnlike(x)
-            kde = self.kde(x)
+            lnlike = self.lnlike(p)
+            kde = self.kde(p)
 
         return np.array([lnlike, lnprior, kde])
 
@@ -112,6 +112,11 @@ class Sampler(object):
         """
         p = np.array(p0)
 
+        if self._pool is None:
+            m = map
+        else:
+            m = self._pool.map
+
         # Build a proposal if one doesn'g already exist
         if self._kde is None:
             self._kde = optimized_kde(p, pool=self._pool)
@@ -121,15 +126,11 @@ class Sampler(object):
         lnq = lnq0
 
         if lnprior is None or lnlike is None or lnq is None:
-            if self._pool is None:
-                m = map
-            else:
-                m = self._pool.map
-            results = np.array(m(GetLnProbWrapper(self._get_lnlike,
-                                                  self._get_lnprior,
+            results = np.array(m(GetLnProbWrapper(self._get_lnprior,
+                                                  self._get_lnlike,
                                                   self._kde), p))
-            lnlike = results[:, 0]
-            lnprior = results[:, 1]
+            lnprior = results[:, 0]
+            lnlike = results[:, 1]
             lnq = results[:, 2]
 
         # Prepare arrays for storage ahead of time
@@ -148,15 +149,11 @@ class Sampler(object):
 
             # Calculate the prior, likelihood, and proposal density
             # at the proposed locations
-            if self._pool is None:
-                m = map
-            else:
-                m = self._pool.map
-            results = np.array(m(GetLnProbWrapper(self._get_lnlike,
-                                                  self._get_lnprior,
+            results = np.array(m(GetLnProbWrapper(self._get_lnprior,
+                                                  self._get_lnlike,
                                                   self._kde), p_p))
-            lnlike_p = results[:, 0]
-            lnprior_p = results[:, 1]
+            lnprior_p = results[:, 0]
+            lnlike_p = results[:, 1]
             lnq_p = results[:, 2]
 
             # Calculate the (ln) Metropolis-Hastings ration
