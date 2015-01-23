@@ -10,6 +10,12 @@ parallelization and efficient sampling.
 
 Coming soon...
 
+
+## ToDo
+- [ ] Gracefully exit
+- [ ] Implement kernel covariance regularization
+- [ ] More intuitive chain access?
+
 ## Attribution
 
 Coming soon...
