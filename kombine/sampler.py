@@ -18,7 +18,7 @@ class GetLnProbWrapper(object):
             lnlike = self.lnlike(p)
             kde = self.kde(p)
 
-        return np.array([lnlike, lnprior, kde])
+        return np.array([lnprior, lnlike, kde])
 
 
 class Sampler(object):
