@@ -57,11 +57,13 @@ class Sampler(object):
 
         self._pool = pool
 
-        self.accepted = np.zeros((0, self.nwalkers))
         self._chain = np.empty((0, self.nwalkers, self.dim))
         self._lnprior = np.empty((0, self.nwalkers))
         self._lnlike = np.empty((0, self.nwalkers))
         self._lnprop = np.empty((0, self.nwalkers))
+        self._acceptance = np.zeros((0, self.nwalkers))
+
+        self._failed_p = None
 
     def sample(self, p0, lnprior0=None, lnlike0=None, lnprop0=None,
                iterations=1, update_interval=10):
@@ -143,8 +145,8 @@ class Sampler(object):
             (self._lnlike, np.zeros((iterations, self.nwalkers))))
         self._lnprop = np.concatenate(
             (self._lnprop, np.zeros((iterations, self.nwalkers))))
-        self.accepted = np.concatenate(
-            (self.accepted, np.zeros((iterations, self.nwalkers))))
+        self._acceptance = np.concatenate(
+            (self._acceptance, np.zeros((iterations, self.nwalkers))))
 
         for i in xrange(int(iterations)):
             # Draw new walker locations from the proposal
@@ -161,22 +163,16 @@ class Sampler(object):
                 lnprop_p = results[:, 2]
 
             # Catch any exceptions and exit gracefully
-            except exception:
+            except Exception as e:
                 self._failed_p = p_p
                 self._chain = self._chain[:self.iterations]
                 self._lnprior = self._lnprior[:self.iterations]
                 self._lnlike = self._lnlike[:self.iterations]
                 self._lnprop = self._lnprop[:self.iterations]
-                self.accepted = self.accepted[:self.iterations]
+                self._acceptance = self._acceptance[:self.iterations]
 
-                print "Failure while evaluating probabilities:", exception
-                print "Recover offending sample with ``get_failure``."
-                print "Returning last successful sample."
-
-                return (self._chain[self.iterations],
-                        self._lnprior[self.iterations],
-                        self._lnlike[self.iterations],
-                        self._lnprop[self._iterations])
+                print "Offending samples stored in ``failed_p``."
+                raise
 
             # Calculate the (ln) Metropolis-Hastings ration
             ln_mh_ratio = lnprior_p + lnlike_p - lnprior - lnlike
@@ -202,7 +198,7 @@ class Sampler(object):
             self._lnprior[self.iterations, :] = lnprior
             self._lnlike[self.iterations, :] = lnlike
             self._lnprop[self.iterations, :] = lnprop
-            self.accepted[self.iterations, :] = acc
+            self._acceptance[self.iterations, :] = acc
 
             self.iterations += 1
 
@@ -212,8 +208,52 @@ class Sampler(object):
 
         return (p, lnprior, lnlike, lnprop)
 
-    def get_failure(self):
+    @property
+    def failed_p(self):
+        """
+        Sample that caused the last exception.
+        """
         return self._failed_p
+
+    @property
+    def chain(self):
+        """
+        Ensemble's past samples,
+            with shape ``(iterations, nwalkers, ndim)``.
+        """
+        return self._chain
+
+    @property
+    def lnprior(self):
+        """
+        Ensemble's past prior probabilities,
+            with shape ``(iterations, nwalkers)``.
+        """
+        return self._lnprior
+
+    @property
+    def lnlike(self):
+        """
+        Ensemble's past likelihoods,
+            with shape ``(iterations, nwalkers)``.
+        """
+        return self._lnlike
+
+    @property
+    def lnprop(self):
+        """
+        Ensemble's past proposal probabilities,
+            with shape ``(iterations, nwalkers)``.
+        """
+        return self._lnprop
+
+    @property
+    def acceptance(self):
+        """
+        Boolean array of ensemble's past acceptances,
+            with shape ``(iterations, nwalkers)``.
+        """
+        return self._acceptance
 
     def animate(self, labels=None):
         from .animate import animate_triangle
