@@ -12,7 +12,7 @@ Coming soon...
 
 
 ## ToDo
-- [ ] Gracefully exit
+- [x] Gracefully exit
 - [ ] Implement kernel covariance regularization
 - [ ] More intuitive chain access?
 
