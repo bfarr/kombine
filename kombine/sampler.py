@@ -59,10 +59,11 @@ class Sampler(object):
 
         self.accepted = np.zeros((0, self.nwalkers))
         self._chain = np.empty((0, self.nwalkers, self.dim))
-        self._lnpost = np.empty((0, self.nwalkers))
+        self._lnprior = np.empty((0, self.nwalkers))
+        self._lnlike = np.empty((0, self.nwalkers))
         self._lnprop = np.empty((0, self.nwalkers))
 
-    def sample(self, p0, lnprior0=None, lnlike0=None, lnq0=None,
+    def sample(self, p0, lnprior0=None, lnlike0=None, lnprop0=None,
                iterations=1, update_interval=10):
         """
         Advance the ensemble ``iterations`` steps.
@@ -83,9 +84,9 @@ class Sampler(object):
             values are calculated. It should have the shape
             ``(nwalkers, dim)``.
 
-        :param lnq0: (optional)
+        :param lnprop0: (optional)
             The list of log proposal densities for the walkers at
-            positions ``p0``. If ``lnq0 is None``, the initial
+            positions ``p0``. If ``lnprop0 is None``, the initial
             values are calculated. It should have the shape
             ``(nwalkers, dim)``.
 
@@ -106,7 +107,7 @@ class Sampler(object):
         * ``lnlike`` - The list of log likelihoods for the
           walkers at positions ``p``, with shape ``(nwalkers, dim)``.
 
-        * ``lnq`` - The list of log proposal densities for the
+        * ``lnprop`` - The list of log proposal densities for the
           walkers at positions ``p``, with shape ``(nwalkers, dim)``.
 
         """
@@ -123,21 +124,23 @@ class Sampler(object):
 
         lnprior = lnprior0
         lnlike = lnlike0
-        lnq = lnq0
+        lnprop = lnprop0
 
-        if lnprior is None or lnlike is None or lnq is None:
+        if lnprior is None or lnlike is None or lnprop is None:
             results = np.array(m(GetLnProbWrapper(self._get_lnprior,
                                                   self._get_lnlike,
                                                   self._kde), p))
             lnprior = results[:, 0]
             lnlike = results[:, 1]
-            lnq = results[:, 2]
+            lnprop = results[:, 2]
 
         # Prepare arrays for storage ahead of time
         self._chain = np.concatenate(
             (self._chain, np.zeros((iterations, self.nwalkers, self.dim))))
-        self._lnpost = np.concatenate(
-            (self._lnpost, np.zeros((iterations, self.nwalkers))))
+        self._lnprior = np.concatenate(
+            (self._lnprior, np.zeros((iterations, self.nwalkers))))
+        self._lnlike = np.concatenate(
+            (self._lnlike, np.zeros((iterations, self.nwalkers))))
         self._lnprop = np.concatenate(
             (self._lnprop, np.zeros((iterations, self.nwalkers))))
         self.accepted = np.concatenate(
@@ -149,15 +152,35 @@ class Sampler(object):
 
             # Calculate the prior, likelihood, and proposal density
             # at the proposed locations
-            results = np.array(m(GetLnProbWrapper(self._get_lnprior,
-                                                  self._get_lnlike,
-                                                  self._kde), p_p))
-            lnprior_p = results[:, 0]
-            lnlike_p = results[:, 1]
-            lnq_p = results[:, 2]
+            try:
+                results = np.array(m(GetLnProbWrapper(self._get_lnprior,
+                                                      self._get_lnlike,
+                                                      self._kde), p_p))
+                lnprior_p = results[:, 0]
+                lnlike_p = results[:, 1]
+                lnprop_p = results[:, 2]
+
+            # Catch any exceptions and exit gracefully
+            except exception:
+                self._failed_p = p_p
+                self._chain = self._chain[:self.iterations]
+                self._lnprior = self._lnprior[:self.iterations]
+                self._lnlike = self._lnlike[:self.iterations]
+                self._lnprop = self._lnprop[:self.iterations]
+                self.accepted = self.accepted[:self.iterations]
+
+                print "Failure while evaluating probabilities:", exception
+                print "Recover offending sample with ``get_failure``."
+                print "Returning last successful sample."
+
+                return (self._chain[self.iterations],
+                        self._lnprior[self.iterations],
+                        self._lnlike[self.iterations],
+                        self._lnprop[self._iterations])
 
             # Calculate the (ln) Metropolis-Hastings ration
-            ln_mh_ratio = lnprior_p + lnlike_p - lnprior - lnlike + lnq - lnq_p
+            ln_mh_ratio = lnprior_p + lnlike_p - lnprior - lnlike
+            ln_mh_ratio += lnprop - lnprop_p
 
             # Accept if ratio is greater than 1
             acc = ln_mh_ratio > 0
@@ -172,12 +195,13 @@ class Sampler(object):
                 p[acc] = p_p[acc]
                 lnprior[acc] = lnprior_p[acc]
                 lnlike[acc] = lnlike_p[acc]
-                lnq[acc] = lnq_p[acc]
+                lnprop[acc] = lnprop_p[acc]
 
             # Store stuff
             self._chain[self.iterations, :, :] = p
-            self._lnpost[self.iterations, :] = lnprior + lnlike
-            self._lnprop[self.iterations, :] = lnq
+            self._lnprior[self.iterations, :] = lnprior
+            self._lnlike[self.iterations, :] = lnlike
+            self._lnprop[self.iterations, :] = lnprop
             self.accepted[self.iterations, :] = acc
 
             self.iterations += 1
@@ -186,7 +210,10 @@ class Sampler(object):
             if self.iterations % update_interval == 0:
                 self._kde = optimized_kde(p, pool=self._pool)
 
-        return p, lnprior, lnlike, lnq
+        return (p, lnprior, lnlike, lnprop)
+
+    def get_failure(self):
+        return self._failed_p
 
     def animate(self, labels=None):
         from .animate import animate_triangle
