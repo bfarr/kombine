@@ -60,21 +60,24 @@ def animate_triangle(pos_T, labels=None, truths=None,
     nframes, nwalkers, ndim = pos_T.shape
 
     final_bins = 50  # number of bins covering final posterior
-    # Use last time step to get y-limits of histograms
+
+    # Determine the extent of each parameter, and the final height of the bins
     bins = []
     ymaxs = []
+    extremes = []
     for x in range(ndim):
+        extremes.append((pos_T[..., x].min(), pos_T[..., x].max()))
         dx = (pos_T[-1, :, x].max() - pos_T[-1, :, x].min())/final_bins
-        nbins = int((pos_T[0, :, x].max() - pos_T[0, :, x].min())/dx)
-        these_bins = np.linspace(pos_T[0, :, x].min(),
-                                 pos_T[0, :, x].max(), nbins + 1)[:-1]
+        nbins = int(np.diff(extremes[x])[0]/dx)
+        these_bins = np.linspace(extremes[x][0],
+                                 extremes[x][1], nbins + 1)[:-1]
         bins.append(these_bins)
         hist, _ = np.histogram(pos_T[-1, :, x], bins=bins[-1], normed=True)
         ymaxs.append(1.1*max(hist))
 
     # Use the first time sample as the initial frame
     fig = triangle.corner(pos_T[0], labels=labels,
-                          plot_contours=False, truths=truths)
+                          plot_contours=False, truths=truths, extents=extremes)
     axes = np.array(fig.axes).reshape((ndim, ndim))
     for x in range(ndim):
         axes[x, x].set_ylim(top=ymaxs[x])
