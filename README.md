@@ -14,7 +14,7 @@ Coming soon...
 ## ToDo
 - [x] Gracefully exit
 - [ ] Implement kernel covariance regularization
-- [ ] More intuitive chain access?
+- [x] More intuitive chain access?
 
 ## Attribution
 
