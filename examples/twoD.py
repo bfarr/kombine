@@ -13,7 +13,7 @@ from matplotlib import animation as mpl_animation
 
 
 # Load up the image (greyscale) and filter to soften it up
-img = median_filter(imread('./kombine.png', flatten=True), 5)
+img = median_filter(imread('../img/kombine.png', flatten=True), 5)
 
 # Convert 'ij' indexing to 'xy' coordinates
 img = np.flipud(img).T
@@ -58,9 +58,30 @@ sampler = kombine.Sampler(nwalkers, dim, lnprior, lnlike, pool=pool)
 # Sample for a bit
 p, prior, like, q = sampler.sample(p, iterations=200)
 
-# Animate the ensemble's progress
-anim = sampler.animate()
+try:
+    import triangle
 
-# Write the animation to file
-writer = mpl_animation.writers['ffmpeg'](fps=30, bitrate=20000)
-anim.save("kombine.mp4", writer=writer)
+    triangle.corner(p)
+    fig = triangle.corner(p)
+    fig.savefig("triangle.png")
+
+except ImportError:
+    print "Get triangle.py for some awesome corner plots!"
+    print "https://github.com/dfm/triangle.py"
+
+
+try:
+    import prism
+
+    # Animate the ensemble's progress
+    anim = prism.corner(sampler.chain)
+
+    # Write the animation to file
+    writer = mpl_animation.writers['ffmpeg'](fps=30, bitrate=20000)
+    anim.save("kombine.mp4", writer=writer)
+
+except ImportError:
+    print "Get prism for some awesome movies!"
+    print "https://github.com/bfarr/prism"
+
+np.savetxt("samples.dat", p)
