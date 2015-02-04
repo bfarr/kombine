@@ -138,7 +138,7 @@ class KDE(object):
         self._data = data
 
         self._mean = np.mean(data, axis=0)
-        self._cov = np.cov(data, rowvar=0)
+        self._cov = oas_cov(data)
 
         self._set_bandwidth()
 
@@ -220,3 +220,37 @@ def _evaluate_point_logpdf(args):
 
     # Work in the log to avoid large numbers
     return logsumexp(-np.sum(diff, axis=1)/2.0)
+
+
+def oas_cov(X):
+    """
+    Estimate the covariance matrix using the Oracle Approximating Shrinkage
+    algorithm, returning
+
+    (1 - shrinkage)*cov + shrinkage * mu * np.identity(ndim)
+
+    where mu = trace(cov) / ndim.  This ensures the covariance matrix estimate
+    is well behaved for small sample sizes.
+
+    :param X:
+        An N x ndim array, containing N samples from the target distribution.
+
+
+    This follows the implementation in ``scikit-learn``
+    (https://github.com/scikit-learn/scikit-learn/blob/31c5497/sklearn/covariance/shrunk_covariance_.py)
+    """
+    X = np.asarray(X)
+    N, ndim = X.shape
+
+    emperical_cov = np.cov(X, rowvar=0)
+    mu = np.trace(emperical_cov) / ndim
+
+    alpha = np.mean(emperical_cov * emperical_cov)
+    num = alpha + mu * mu
+    den = (N + 1.) * (alpha - (mu * mu) / ndim)
+
+    shrinkage = min(num / den, 1.)
+    shrunk_cov = (1. - shrinkage) * emperical_cov
+    shrunk_cov.flat[::ndim + 1] += shrinkage * mu
+
+    return shrunk_cov
