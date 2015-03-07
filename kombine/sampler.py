@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import ks_2samp
 
 from .interruptible_pool import Pool
 from .clustered_kde import optimized_kde
@@ -69,6 +70,85 @@ class Sampler(object):
         self._acceptance = np.zeros((0, self.nwalkers))
 
         self._failed_p = None
+
+    def burnin(self, p0, lnprior0=None, lnlike0=None, lnprop0=None,
+               update_interval=10):
+        """
+        Use two-sample K-S tests to determine when burnin is complete.  The
+        interval over which distributions are compared will be adapted based
+        on the average acceptance rate of the walkers.
+
+        :param p0:
+            A list of the initial walker positions.  It should have the
+            shape ``(nwalkers, dim)``.
+
+        :param lnprior0: (optional)
+            The list of log prior probabilities for the walkers at
+            positions ``p0``. If ``lnprior0 is None``, the initial
+            values are calculated. It should have the shape
+            ``(nwalkers, dim)``.
+
+        :param lnlike0: (optional)
+            The list of log likelihoods for the walkers at
+            positions ``p0``. If ``lnlike0 is None``, the initial
+            values are calculated. It should have the shape
+            ``(nwalkers, dim)``.
+
+        :param lnprop0: (optional)
+            The list of log proposal densities for the walkers at
+            positions ``p0``. If ``lnprop0 is None``, the initial
+            values are calculated. It should have the shape
+            ``(nwalkers, dim)``.
+
+        :param update_interval: (optional)
+            The number of steps between proposal updates.
+
+        After burning in, this method returns:
+
+        * ``p`` - A list of the current walker positions, the shape of which
+            will be ``(nwalkers, dim)``.
+
+        * ``lnprior`` - The list of log prior probabilities for the
+          walkers at positions ``p``, with shape ``(nwalkers, dim)``.
+
+        * ``lnlike`` - The list of log likelihoods for the
+          walkers at positions ``p``, with shape ``(nwalkers, dim)``.
+
+        * ``lnprop`` - The list of log proposal densities for the
+          walkers at positions ``p``, with shape ``(nwalkers, dim)``.
+
+        """
+        # Go until all two-sample K-S p-values are above this
+        critical_pval = 0.05
+
+        # Start the K-S testing interval at the update interval length
+        test_interval = update_interval
+
+        burned_in = False
+        while not burned_in:
+            p, lnprior, lnlike, lnprop = self.sample(p0, lnprior0,
+                                                     lnlike0, lnprop0,
+                                                     test_interval,
+                                                     update_interval)
+
+            burned_in = True
+            for par in range(self.dim):
+                KS, pval = ks_2samp(p0[:, par], p[:, par])
+
+                if pval < critical_pval:
+                    burned_in = False
+                    break
+
+            # Adjust the interval so walkers accept an average of ~10 jumps
+            if not burned_in:
+                acceptance_rate = np.mean(self.acceptance[-test_interval])
+
+                # Be sure not to divide by zero
+                test_interval = 10*(1+int(1./acceptance_rate))
+
+                p0, lnprior0, lnlike0, lnprop0 = p, lnprior, lnlike, lnprop
+
+        return (p, lnprior, lnlike, lnprop)
 
     def sample(self, p0, lnprior0=None, lnlike0=None, lnprop0=None,
                iterations=1, update_interval=10):
