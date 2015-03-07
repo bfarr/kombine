@@ -1,5 +1,6 @@
 import numpy as np
 
+from .interruptible_pool import Pool
 from .clustered_kde import optimized_kde
 
 
@@ -44,7 +45,8 @@ class Sampler(object):
         returns the natural logarithm of the likelihood for that position.
 
     """
-    def __init__(self, nwalkers, ndim, lnpriorfn, lnlikefn, pool=None):
+    def __init__(self, nwalkers, ndim, lnpriorfn, lnlikefn,
+                 processes=None, pool=None):
         self.nwalkers = nwalkers
         self.dim = ndim
 
@@ -55,7 +57,10 @@ class Sampler(object):
 
         self._kde = None
 
-        self._pool = pool
+        self.pool = pool
+        self.processes = processes
+        if self.processes != 1 and self.pool is None:
+            self.pool = Pool(self.processes)
 
         self._chain = np.empty((0, self.nwalkers, self.dim))
         self._lnprior = np.empty((0, self.nwalkers))
@@ -115,14 +120,14 @@ class Sampler(object):
         """
         p = np.array(p0)
 
-        if self._pool is None:
+        if self.pool is None:
             m = map
         else:
-            m = self._pool.map
+            m = self.pool.map
 
         # Build a proposal if one doesn'g already exist
         if self._kde is None:
-            self._kde = optimized_kde(p, pool=self._pool)
+            self._kde = optimized_kde(p, pool=self.pool)
 
         lnprior = lnprior0
         lnlike = lnlike0
@@ -204,7 +209,7 @@ class Sampler(object):
 
             # Update the proposal at the requested interval
             if self.iterations % update_interval == 0:
-                self._kde = optimized_kde(p, pool=self._pool)
+                self._kde = optimized_kde(p, pool=self.pool)
 
         return (p, lnprior, lnlike, lnprop)
 
