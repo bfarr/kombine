@@ -276,14 +276,14 @@ class Sampler(object):
                 lnlike_p = results[:, 1]
                 lnprop_p = results[:, 2]
 
+            except KeyboardInterrupt:
+                self.rollback(self.iterations)
+                raise
+
             # Catch any exceptions and exit gracefully
             except Exception as e:
+                self.rollback(self.iterations)
                 self._failed_p = p_p
-                self._chain = self._chain[:self.iterations]
-                self._lnprior = self._lnprior[:self.iterations]
-                self._lnlike = self._lnlike[:self.iterations]
-                self._lnprop = self._lnprop[:self.iterations]
-                self._acceptance = self._acceptance[:self.iterations]
 
                 print "Offending samples stored in ``failed_p``."
                 raise
@@ -368,6 +368,22 @@ class Sampler(object):
             with shape ``(iterations, nwalkers)``.
         """
         return self._acceptance
+
+    def rollback(self, iteration):
+        """
+        Shrink arrays down to a length of ``iteration`` and reset the
+        pool if there is one.
+        """
+        self._chain = self._chain[:iteration]
+        self._lnprior = self._lnprior[:iteration]
+        self._lnlike = self._lnlike[:iteration]
+        self._lnprop = self._lnprop[:iteration]
+        self._acceptance = self._acceptance[:iteration]
+
+        # Close the old pool and open a new one
+        if self.processes != 1:
+            self.pool.close()
+            self.pool = Pool(self.processes)
 
     def animate(self, labels=None):
         from .animate import animate_triangle
