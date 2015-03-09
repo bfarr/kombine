@@ -72,7 +72,7 @@ class Sampler(object):
         self._failed_p = None
 
     def burnin(self, p0, lnprior0=None, lnlike0=None, lnprop0=None,
-               update_interval=10):
+               update_interval=10, max_steps=None):
         """
         Use two-sample K-S tests to determine when burnin is complete.  The
         interval over which distributions are compared will be adapted based
@@ -103,6 +103,10 @@ class Sampler(object):
         :param update_interval: (optional)
             The number of steps between proposal updates.
 
+        :param max_steps: (optional)
+            An absolute maximum number of steps to take, in case burnin
+            is too painful.
+
         After burning in, this method returns:
 
         * ``p`` - A list of the current walker positions, the shape of which
@@ -124,8 +128,18 @@ class Sampler(object):
         # Start the K-S testing interval at the update interval length
         test_interval = update_interval
 
+        # Determine the maximum iteration to look for
+        start = self.iterations
+        max_iter = np.inf
+        if max_steps is not None:
+            max_iter = start + max_steps
+
         burned_in = False
         while not burned_in:
+            # Give up if we're about to exceed the maximum number of iterations
+            if self.iterations + test_interval > max_iter:
+                break
+
             p, lnprior, lnlike, lnprop = self.sample(p0, lnprior0,
                                                      lnlike0, lnprop0,
                                                      test_interval,
@@ -139,14 +153,29 @@ class Sampler(object):
                     burned_in = False
                     break
 
-            # Adjust the interval so walkers accept an average of ~10 jumps
+            # Adjust the interval so >~ 90% of walkers accept a jump
             if not burned_in:
-                acceptance_rate = np.mean(self.acceptance[-test_interval])
+                # Use the average acceptance of the last step to window
+                #   over the last 10 accepted jumps (on average)
+                window = int(10 * 1/np.mean(self.acceptance[-1]))
+                acceptance_rates = np.mean(self.acceptance[-window:], axis=0)
 
-                # Be sure not to divide by zero
-                test_interval = 10*(1+int(1./acceptance_rate))
+                # Use the first decile of the walkers' acceptance rates to
+                #  decide the next test interval
+                index = int(.1*self.nwalkers)
+                low_rate = np.sort(acceptance_rates)[index]
+
+                # If there is a lot of variance in acceptance rates, get
+                #   another 10 acceptances (on average) and check again.
+                if low_rate > 0.:
+                    test_interval = int(1./low_rate)
+                else:
+                    test_interval = window
 
                 p0, lnprior0, lnlike0, lnprop0 = p, lnprior, lnlike, lnprop
+
+        if not burned_in:
+            print "Burnin unsuccessful."
 
         return (p, lnprior, lnlike, lnprop)
 
