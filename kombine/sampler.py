@@ -134,6 +134,9 @@ class Sampler(object):
         if max_steps is not None:
             max_iter = start + max_steps
 
+            # If max_steps < update interval, at least run to max_steps
+            test_interval = min(test_interval, max_steps)
+
         burned_in = False
         while not burned_in:
             # Give up if we're about to exceed the maximum number of iterations
