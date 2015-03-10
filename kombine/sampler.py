@@ -266,62 +266,64 @@ class Sampler(object):
             (self._acceptance, np.zeros((iterations, self.nwalkers))))
 
         for i in xrange(int(iterations)):
-            # Draw new walker locations from the proposal
-            p_p = self._kde.draw(N=self.nwalkers)
-
-            # Calculate the prior, likelihood, and proposal density
-            # at the proposed locations
             try:
-                results = np.array(m(GetLnProbWrapper(self._get_lnprior,
-                                                      self._get_lnlike,
-                                                      self._kde), p_p))
-                lnprior_p = results[:, 0]
-                lnlike_p = results[:, 1]
-                lnprop_p = results[:, 2]
+                # Draw new walker locations from the proposal
+                p_p = self._kde.draw(N=self.nwalkers)
+
+                # Calculate the prior, likelihood, and proposal density
+                # at the proposed locations
+                try:
+                    results = np.array(m(GetLnProbWrapper(self._get_lnprior,
+                                                          self._get_lnlike,
+                                                          self._kde), p_p))
+                    lnprior_p = results[:, 0]
+                    lnlike_p = results[:, 1]
+                    lnprop_p = results[:, 2]
+
+                # Catch any exceptions and exit gracefully
+                except Exception as e:
+                    self.rollback(self.iterations)
+                    self._failed_p = p_p
+
+                    print "Offending samples stored in ``failed_p``."
+                    raise
+
+                # Calculate the (ln) Metropolis-Hastings ration
+                ln_mh_ratio = lnprior_p + lnlike_p - lnprior - lnlike
+                ln_mh_ratio += lnprop - lnprop_p
+
+                # Accept if ratio is greater than 1
+                acc = ln_mh_ratio > 0
+
+                # Decide which of the remainder will be accepted
+                worse = ~acc
+                nworse = np.sum(worse)
+                uniform_draws = np.random.rand(nworse)
+                acc[worse] = ln_mh_ratio[worse] > np.log(uniform_draws)
+
+                # Update locations and probability densities
+                if np.any(acc):
+                    p[acc] = p_p[acc]
+                    lnprior[acc] = lnprior_p[acc]
+                    lnlike[acc] = lnlike_p[acc]
+                    lnprop[acc] = lnprop_p[acc]
+
+                # Store stuff
+                self._chain[self.iterations, :, :] = p
+                self._lnprior[self.iterations, :] = lnprior
+                self._lnlike[self.iterations, :] = lnlike
+                self._lnprop[self.iterations, :] = lnprop
+                self._acceptance[self.iterations, :] = acc
+
+                self.iterations += 1
+
+                # Update the proposal at the requested interval
+                if self.iterations % update_interval == 0:
+                    self._kde = optimized_kde(p, pool=self.pool)
 
             except KeyboardInterrupt:
                 self.rollback(self.iterations)
                 raise
-
-            # Catch any exceptions and exit gracefully
-            except Exception as e:
-                self.rollback(self.iterations)
-                self._failed_p = p_p
-
-                print "Offending samples stored in ``failed_p``."
-                raise
-
-            # Calculate the (ln) Metropolis-Hastings ration
-            ln_mh_ratio = lnprior_p + lnlike_p - lnprior - lnlike
-            ln_mh_ratio += lnprop - lnprop_p
-
-            # Accept if ratio is greater than 1
-            acc = ln_mh_ratio > 0
-
-            # Decide which of the remainder will be accepted
-            worse = ~acc
-            nworse = np.sum(worse)
-            acc[worse] = ln_mh_ratio[worse] > np.log(np.random.rand(nworse))
-
-            # Update locations and probability densities
-            if np.any(acc):
-                p[acc] = p_p[acc]
-                lnprior[acc] = lnprior_p[acc]
-                lnlike[acc] = lnlike_p[acc]
-                lnprop[acc] = lnprop_p[acc]
-
-            # Store stuff
-            self._chain[self.iterations, :, :] = p
-            self._lnprior[self.iterations, :] = lnprior
-            self._lnlike[self.iterations, :] = lnlike
-            self._lnprop[self.iterations, :] = lnprop
-            self._acceptance[self.iterations, :] = acc
-
-            self.iterations += 1
-
-            # Update the proposal at the requested interval
-            if self.iterations % update_interval == 0:
-                self._kde = optimized_kde(p, pool=self.pool)
 
         return (p, lnprior, lnlike, lnprop)
 
