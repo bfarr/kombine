@@ -336,6 +336,32 @@ class Sampler(object):
         """
         return self._acceptance
 
+    @property
+    def acceptance_fraction(self):
+        """
+        An array (length: ``iterations``) of the fraction of walkers that
+            accepted each step.
+        """
+        return np.mean(self.acceptance, axis=1)
+
+    @property
+    def acceptance_rate(self, window=None):
+        """
+        """
+        N = len(self.acceptance)
+
+        # Use the mean acceptance rate of the last step to set the window
+        if window is None:
+            window = int(20 * 1.0/np.mean(self.acceptance[-1]))
+
+        rates = np.empty((self.nwalkers, N - window + 1))
+        weights = np.ones(window)/window
+
+        for w in range(self.nwalkers):
+            rates[w] = np.convolve(self.acceptance[:, w], weights, 'valid')
+
+        return rates
+
     def rollback(self, iteration):
         """
         Shrink arrays down to a length of ``iteration`` and reset the
