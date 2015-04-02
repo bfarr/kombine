@@ -338,11 +338,3 @@ class Sampler(object):
         if self.processes != 1:
             self.pool.close()
             self.pool = Pool(self.processes)
-
-    def animate(self, labels=None):
-        from .animate import animate_triangle
-
-        if not labels:
-            labels = [r'$x_{}$'.format(i) for i in range(self.dim)]
-
-        return animate_triangle(self._chain, labels=labels)
