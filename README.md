@@ -11,14 +11,14 @@ parallelization and efficient sampling.
 Coming soon...
 
 
-## ToDo
-- [x] Gracefully exit
-- [x] Implement kernel covariance regularization
-- [x] More intuitive chain access?
-
 ## Attribution
 
-Coming soon...
+@article{kombine,
+   author = {{Farr}, B. and {Farr}, W.~M.},
+    title = {kombine: a kernel-density-based, embarrassingly parallel ensemble sampler},
+     year = 2015,
+     note = "in prep"
+}
 
 ## License
 
