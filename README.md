@@ -12,13 +12,14 @@ Coming soon...
 
 
 ## Attribution
-
+```
 @article{kombine,
    author = {{Farr}, B. and {Farr}, W.~M.},
     title = {kombine: a kernel-density-based, embarrassingly parallel ensemble sampler},
      year = 2015,
      note = "in prep"
 }
+```
 
 ## License
 
