@@ -101,6 +101,8 @@ class Sampler(object):
           walkers at positions ``p``, with shape ``(nwalkers, dim)``.
 
         """
+        p0 = np.array(p0)
+
         # Go until all two-sample K-S p-values are above this
         critical_pval = 0.05
 
@@ -159,14 +161,15 @@ class Sampler(object):
 
         return (p, lnpost, lnprop)
 
-    def sample(self, p0, lnpost0=None, lnprop0=None,
+    def sample(self, p0=None, lnpost0=None, lnprop0=None,
                iterations=1, update_interval=10):
         """
         Advance the ensemble ``iterations`` steps.
 
-        :param p0:
-            A list of the initial walker positions.  It should have the
-            shape ``(nwalkers, dim)``.
+        :param p0 (optional):
+            A list of the initial walker positions of shape
+            ``(nwalkers, dim)``.  If ``None`` and a proposal distribution
+            exists, walker positions will be drawn from the proposal.
 
         :param lnpost0: (optional)
             The list of log posterior probabilities for the walkers at
@@ -198,7 +201,10 @@ class Sampler(object):
           walkers at positions ``p``, with shape ``(nwalkers, dim)``.
 
         """
-        p = np.array(p0)
+        if p0 is None:
+            p = self.draw(self.nwalkers)
+        else:
+            p = np.array(p0)
 
         if self.pool is None:
             m = map
@@ -215,8 +221,8 @@ class Sampler(object):
         if lnpost is None or lnprop is None:
             results = np.array(m(GetLnProbWrapper(self._get_lnpost,
                                                   self._kde), p))
-            lnpost = results[:, 0]
-            lnprop = results[:, 1]
+            lnpost = results[:, 0] if lnpost is None else lnpost
+            lnprop = results[:, 1] if lnprop is None else lnprop
 
         # Prepare arrays for storage ahead of time
         self._chain = np.concatenate(
@@ -231,7 +237,7 @@ class Sampler(object):
         for i in xrange(int(iterations)):
             try:
                 # Draw new walker locations from the proposal
-                p_p = self._kde.draw(N=self.nwalkers)
+                p_p = self.draw(self.nwalkers)
 
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
@@ -284,6 +290,12 @@ class Sampler(object):
                 raise
 
         return (p, lnpost, lnprop)
+
+    def draw(self, N):
+        """
+        Draw ``N`` samples from the current proposal distribution.
+        """
+        return self._kde.draw(N)
 
     @property
     def failed_p(self):
