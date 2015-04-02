@@ -8,7 +8,10 @@ parallelization and efficient sampling.
 
 ## Documentation
 
-Coming soon...
+Example usage:
+
+ * [2-D Gaussian](http://nbviewer.ipython.org/github/bfarr/kombine/blob/master/examples/2D_gaussian.ipynb)
+ * [2-D Rosenbrock](http://nbviewer.ipython.org/github/bfarr/kombine/blob/master/examples/rosenbrock.ipynb)
 
 
 ## Attribution
