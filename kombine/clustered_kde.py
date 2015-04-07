@@ -150,19 +150,27 @@ class KDE(object):
         Use Scott's rule to set the kernel bandwidth.  Also store Cholesky
         decomposition for later.
         """
-        self._kernel_cov = self._cov * self._N ** (-2./(self._dim + 4))
+        if self._N > 0:
+            self._kernel_cov = self._cov * self._N ** (-2./(self._dim + 4))
 
-        # Used to evaluate PDF with cho_solve()
-        self._cho_factor = la.cho_factor(self._kernel_cov)
+            # Used to evaluate PDF with cho_solve()
+            self._cho_factor = la.cho_factor(self._kernel_cov)
 
-        # Make sure the estimated PDF integrates to 1.0
-        self._lognorm = self._dim/2.0 * np.log(2.0*np.pi) + np.log(self._N) +\
-            np.sum(np.log(np.diag(self._cho_factor[0])))
+            # Make sure the estimated PDF integrates to 1.0
+            self._lognorm = self._dim/2.0 * np.log(2.0*np.pi) + np.log(self._N) +\
+                np.sum(np.log(np.diag(self._cho_factor[0])))
+
+        else:
+            self._lognorm = -np.inf
 
     def draw(self, N=1):
         """
         Draw samples from the estimated distribution.
         """
+        # Return nothing if this is an empty KDE
+        if self._N == 0:
+            return []
+
         # Draw vanilla samples from a zero-mean multivariate Gaussian
         X = np.random.multivariate_normal(np.zeros(self._dim),
                                           self._kernel_cov, size=N)
@@ -185,8 +193,13 @@ class KDE(object):
         else:
             M = map
 
-        args = [(x, self._data, self._cho_factor) for x in X]
-        results = M(_evaluate_point_logpdf, args)
+        # Return -inf if this is an empty KDE
+        if self._N == 0:
+            results = np.zeros(len(X)) - np.inf
+
+        else:
+            args = [(x, self._data, self._cho_factor) for x in X]
+            results = M(_evaluate_point_logpdf, args)
 
         # Normalize and return
         return np.array(results) - self._lognorm
