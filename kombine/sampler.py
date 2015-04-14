@@ -265,7 +265,7 @@ class Sampler(object):
                     print "Offending samples stored in ``failed_p``."
                     raise
 
-                # Calculate the (ln) Metropolis-Hastings ration
+                # Calculate the (ln) Metropolis-Hastings ratio
                 ln_mh_ratio = lnpost_p - lnpost + lnprop - lnprop_p
 
                 # Accept if ratio is greater than 1
