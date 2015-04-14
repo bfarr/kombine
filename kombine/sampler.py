@@ -37,7 +37,7 @@ class Sampler(object):
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn,
-                 processes=None, pool=None):
+                 processes=1, pool=None, store_chain=True):
         self.nwalkers = nwalkers
         self.dim = ndim
 
@@ -52,15 +52,23 @@ class Sampler(object):
         if self.processes != 1 and self.pool is None:
             self.pool = Pool(self.processes)
 
-        self._chain = np.empty((0, self.nwalkers, self.dim))
-        self._lnpost = np.empty((0, self.nwalkers))
-        self._lnprop = np.empty((0, self.nwalkers))
-        self._acceptance = np.zeros((0, self.nwalkers))
+        self.store_chain = store_chain
+        if self.store_chain:
+            self._chain = np.empty((0, self.nwalkers, self.dim))
+            self._lnpost = np.empty((0, self.nwalkers))
+            self._lnprop = np.empty((0, self.nwalkers))
+            self._acceptance = np.zeros((0, self.nwalkers))
+        else:
+            self._chain = None
+            self._lnpost = None
+            self._lnprop = None
+            self._acceptance = None
 
         self._failed_p = None
 
     def burnin(self, p0, lnpost0=None, lnprop0=None,
-               update_interval=10, max_steps=None):
+               update_interval=10, max_steps=None,
+               critical_pval=0.05):
         """
         Use two-sample K-S tests to determine when burnin is complete.  The
         interval over which distributions are compared will be adapted based
@@ -89,6 +97,10 @@ class Sampler(object):
             An absolute maximum number of steps to take, in case burnin
             is too painful.
 
+        :param critical_pval: (optional)
+            Burnin proceeds until all two-sample K-S p-values exceed this
+            threshold (default 0.05)
+
         After burning in, this method returns:
 
         * ``p`` - A list of the current walker positions, the shape of which
@@ -102,9 +114,6 @@ class Sampler(object):
 
         """
         p0 = np.array(p0)
-
-        # Go until all two-sample K-S p-values are above this
-        critical_pval = 0.05
 
         # Start the K-S testing interval at the update interval length
         test_interval = update_interval
@@ -224,15 +233,16 @@ class Sampler(object):
             lnpost = results[:, 0] if lnpost is None else lnpost
             lnprop = results[:, 1] if lnprop is None else lnprop
 
-        # Prepare arrays for storage ahead of time
-        self._chain = np.concatenate(
-            (self._chain, np.zeros((iterations, self.nwalkers, self.dim))))
-        self._lnpost = np.concatenate(
-            (self._lnpost, np.zeros((iterations, self.nwalkers))))
-        self._lnprop = np.concatenate(
-            (self._lnprop, np.zeros((iterations, self.nwalkers))))
-        self._acceptance = np.concatenate(
-            (self._acceptance, np.zeros((iterations, self.nwalkers))))
+        if self.store_chain:
+            # Prepare arrays for storage ahead of time
+            self._chain = np.concatenate(
+                (self._chain, np.zeros((iterations, self.nwalkers, self.dim))))
+            self._lnpost = np.concatenate(
+                (self._lnpost, np.zeros((iterations, self.nwalkers))))
+            self._lnprop = np.concatenate(
+                (self._lnprop, np.zeros((iterations, self.nwalkers))))
+            self._acceptance = np.concatenate(
+                (self._acceptance, np.zeros((iterations, self.nwalkers))))
 
         for i in xrange(int(iterations)):
             try:
@@ -273,11 +283,12 @@ class Sampler(object):
                     lnpost[acc] = lnpost_p[acc]
                     lnprop[acc] = lnprop_p[acc]
 
-                # Store stuff
-                self._chain[self.iterations, :, :] = p
-                self._lnpost[self.iterations, :] = lnpost
-                self._lnprop[self.iterations, :] = lnprop
-                self._acceptance[self.iterations, :] = acc
+                if self.store_chain:
+                    # Store stuff
+                    self._chain[self.iterations, :, :] = p
+                    self._lnpost[self.iterations, :] = lnpost
+                    self._lnprop[self.iterations, :] = lnprop
+                    self._acceptance[self.iterations, :] = acc
 
                 self.iterations += 1
 
@@ -367,12 +378,13 @@ class Sampler(object):
         Shrink arrays down to a length of ``iteration`` and reset the
         pool if there is one.
         """
-        self._chain = self._chain[:iteration]
-        self._lnpost = self._lnpost[:iteration]
-        self._lnprop = self._lnprop[:iteration]
-        self._acceptance = self._acceptance[:iteration]
+        if self.store_chain:
+            self._chain = self._chain[:iteration]
+            self._lnpost = self._lnpost[:iteration]
+            self._lnprop = self._lnprop[:iteration]
+            self._acceptance = self._acceptance[:iteration]
 
         # Close the old pool and open a new one
-        if self.processes != 1:
+        if self.processes != 1 and isinstance(self.pool, Pool):
             self.pool.close()
             self.pool = Pool(self.processes)
