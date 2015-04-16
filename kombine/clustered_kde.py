@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.ma as ma
 from scipy.misc import logsumexp
 from scipy import linalg as la
 from scipy.cluster.vq import kmeans, vq
@@ -122,8 +123,8 @@ class ClusteredKDE(object):
         else:
             return logsumexp(logpdfs, axis=0)
 
-    def logpdf(self, X):
-        return self._whitened_logpdf(self._whiten(X))
+    def logpdf(self, X, pool=None):
+        return self._whitened_logpdf(self._whiten(X), pool=pool)
 
     def _whiten(self, data):
         return (data - self._mean)/self._std
@@ -237,6 +238,74 @@ class KDE(object):
 
         # Normalize and return
         return np.array(results) - self._lognorm
+
+    __call__ = logpdf
+
+
+def unique_spaces(mask):
+    ncols = mask.shape[1]
+    dtype = mask.dtype.descr * ncols
+    struct = mask.view(dtype)
+
+    uniq = np.unique(struct)
+    uniq = uniq.view(mask.dtype).reshape(-1, ncols)
+    return ~uniq
+
+class TransdimensionalKDE(object):
+    """
+    A Gaussian kernel density estimator that provides means for evaluating
+    the estimated probability density function, and drawing additional samples
+    from the estimated distribution.  Cholesky decomposition of the covariance
+    makes this class a bit more stable than the scipy KDE.
+
+    :param data:
+        An N x ndim array, containing N samples from the target distribution.
+
+    """
+    def __init__(self, data, pool=None):
+        N, max_dim = data.shape
+        self._N = N
+        self._max_dim = max_dim
+        self._data = data
+
+        self._spaces = unique_spaces(data.mask)
+
+        self._kdes = []
+        weights = []
+        for space in self._spaces:
+            sel = np.all(~data.mask == space, axis=1)
+            N = np.sum(sel)
+            X = data[sel]
+            X = X[~X.mask].reshape((N, -1))
+            self._kdes.append(optimized_kde(X, pool=pool))
+            weights.append(N/float(self._N))
+
+        self._logweights = np.log(np.array(weights))
+
+    def draw(self, N=1):
+        """
+        Draw samples from the estimated distribution.
+        """
+        # Draws spaces randomly with the assigned weights
+        cumulative_weights = np.cumsum(np.exp(self._logweights))
+        space_inds = np.searchsorted(cumulative_weights, np.random.rand(N))
+
+        draws = ma.masked_values(np.zeros((N, self._max_dim)), 0)
+        for s in xrange(len(self._spaces)):
+            sel = space_inds == s
+            n = np.sum(sel)
+            if n > 0:
+                draws[sel, self._spaces[s]] = self._kdes[s].draw(n)
+
+        return draws
+
+    def logpdf(self, X, pool=None):
+        logpdfs = []
+        for logweight, space, kde in zip(self._logweights, self._spaces, self._kdes):
+            if np.all(space == ~X.mask):
+                logpdfs.append(logweight + kde(X[space], pool=pool))
+
+        return logsumexp(logpdfs, axis=0)
 
     __call__ = logpdf
 
