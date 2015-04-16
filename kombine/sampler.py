@@ -44,7 +44,7 @@ class Sampler(object):
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn,
-                 processes=1, pool=None):
+                 processes=None, pool=None):
         self.nwalkers = nwalkers
         self.dim = ndim
 
