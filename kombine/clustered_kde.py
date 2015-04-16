@@ -86,7 +86,10 @@ class ClusteredKDE(object):
     def _whitened_logpdf(self, X, pool=None):
         logpdfs = [logweight + kde(X, pool=pool)
                    for logweight, kde in zip(self._logweights, self._kdes)]
-        return logsumexp(logpdfs, axis=0)
+        if len(X.shape) == 1:
+            return logsumexp(logpdfs)
+        else:
+            return logsumexp(logpdfs, axis=0)
 
     def logpdf(self, X):
         return self._whitened_logpdf(self._whiten(X))

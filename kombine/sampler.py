@@ -11,11 +11,18 @@ class GetLnProbWrapper(object):
         self.kde = kde
 
     def __call__(self, p):
-        lnpost = self.lnpost(p)
+        result = self.lnpost(p)
         kde = self.kde(p)
 
-        return np.array([lnpost, kde])
-
+        # allow posterior function to optionally
+        # return additional metadata
+        try:
+            lnpost = result[0]
+            blob = result[1]
+            return lnpost, kde, blob
+        except IndexError:
+            lnpost = result
+            return lnpost, kde
 
 class Sampler(object):
     """
@@ -37,7 +44,7 @@ class Sampler(object):
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn,
-                 processes=1, pool=None, store_chain=True):
+                 processes=1, pool=None):
         self.nwalkers = nwalkers
         self.dim = ndim
 
@@ -52,21 +59,15 @@ class Sampler(object):
         if self.processes != 1 and self.pool is None:
             self.pool = Pool(self.processes)
 
-        self.store_chain = store_chain
-        if self.store_chain:
-            self._chain = np.empty((0, self.nwalkers, self.dim))
-            self._lnpost = np.empty((0, self.nwalkers))
-            self._lnprop = np.empty((0, self.nwalkers))
-            self._acceptance = np.zeros((0, self.nwalkers))
-        else:
-            self._chain = None
-            self._lnpost = None
-            self._lnprop = None
-            self._acceptance = None
+        self._chain = np.empty((0, self.nwalkers, self.dim))
+        self._lnpost = np.empty((0, self.nwalkers))
+        self._lnprop = np.empty((0, self.nwalkers))
+        self._acceptance = np.zeros((0, self.nwalkers))
+        self._blobs = []
 
         self._failed_p = None
 
-    def burnin(self, p0, lnpost0=None, lnprop0=None,
+    def burnin(self, p0, lnpost0=None, lnprop0=None, blob0=None,
                update_interval=10, max_steps=None,
                critical_pval=0.05):
         """
@@ -90,6 +91,9 @@ class Sampler(object):
             values are calculated. It should have the shape
             ``(nwalkers, dim)``.
 
+        :param blob0: (optional)
+            The list of blob data for walkers at positions ``p0``.
+
         :param update_interval: (optional)
             The number of steps between proposal updates.
 
@@ -112,6 +116,9 @@ class Sampler(object):
         * ``lnprop`` - The list of log proposal densities for the
           walkers at positions ``p``, with shape ``(nwalkers, dim)``.
 
+        * ``blob`` - The list of blob data for walkers at position ``p``,
+          with shape ``(nwalkers,)`` if returned by ``lnpostfn`` else None
+
         """
         p0 = np.array(p0)
 
@@ -133,8 +140,10 @@ class Sampler(object):
             if self.iterations + test_interval > max_iter:
                 break
 
-            p, lnpost, lnprop = self.sample(p0, lnpost0, lnprop0,
-                                            test_interval, update_interval)
+            p, lnpost, lnprop, blob = self.sample(p0, lnpost0, lnprop0, blob0,
+                                                  iterations=test_interval,
+                                                  update_interval=update_interval,
+                                                  storechain=True)
 
             burned_in = True
             for par in range(self.dim):
@@ -148,7 +157,7 @@ class Sampler(object):
             if not burned_in:
                 # Use the average acceptance of the last step to window
                 #   over the last 10 accepted jumps (on average)
-                window = int(10 * 1/np.mean(self.acceptance[-1]))
+                window = int(min(10, self.iterations) * 1/np.mean(self.acceptance[-1]))
                 acceptance_rates = np.mean(self.acceptance[-window:], axis=0)
 
                 # Use the first decile of the walkers' acceptance rates to
@@ -163,15 +172,15 @@ class Sampler(object):
                 else:
                     test_interval = window
 
-                p0, lnpost0, lnprop0 = p, lnpost, lnprop
+                p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
 
         if not burned_in:
             print "Burnin unsuccessful."
 
-        return (p, lnpost, lnprop)
+        return p, lnpost, lnprop, blob
 
-    def sample(self, p0=None, lnpost0=None, lnprop0=None,
-               iterations=1, update_interval=10):
+    def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
+               iterations=1, update_interval=10, storechain=True):
         """
         Advance the ensemble ``iterations`` steps.
 
@@ -192,13 +201,23 @@ class Sampler(object):
             values are calculated. It should have the shape
             ``(nwalkers, dim)``.
 
+        :param blob0: (optional)
+            The list of blob data for the walkers at positions ``p0``.
+            If ``blob0 is None`` but ``lnpost0`` and ``lnprop0`` are
+            given, the likelihood function is assumed not
+            to return blob data and it is not recomputed.
+
         :param iterations: (optional)
             The number of steps to run.
 
         :param update_interval: (optional)
             The number of steps between proposal updates.
 
-        After ``iteration`` steps, this method returns:
+        :param storechain: (optional)
+            Whether to keep the chain and posterior values in memory or
+            return them step-by-step as a generator
+
+        After ``iteration`` steps, this method returns (if storechain=True):
 
         * ``p`` - A list of the current walker positions, the shape of which
             will be ``(nwalkers, dim)``.
@@ -208,6 +227,9 @@ class Sampler(object):
 
         * ``lnprop`` - The list of log proposal densities for the
           walkers at positions ``p``, with shape ``(nwalkers, dim)``.
+
+        * ``blob`` - The list of blob data for the walkers at positions ``p``
+          if provided by `lnpostfn`` else None
 
         """
         if p0 is None:
@@ -220,20 +242,31 @@ class Sampler(object):
         else:
             m = self.pool.map
 
-        # Build a proposal if one doesn'g already exist
+        # Build a proposal if one doesn't already exist
         if self._kde is None:
             self._kde = optimized_kde(p, pool=self.pool)
 
         lnpost = lnpost0
         lnprop = lnprop0
+        blob = blob0
 
         if lnpost is None or lnprop is None:
-            results = np.array(m(GetLnProbWrapper(self._get_lnpost,
-                                                  self._kde), p))
-            lnpost = results[:, 0] if lnpost is None else lnpost
-            lnprop = results[:, 1] if lnprop is None else lnprop
+            results = list(m(GetLnProbWrapper(self._get_lnpost,
+                                              self._kde), p))
+            lnpost = np.array([r[0] for r in results]) if lnpost is None else lnpost
+            lnprop = np.array([r[1] for r in results]) if lnprop is None else lnprop
 
-        if self.store_chain:
+            if blob is None:
+                try:
+                    blob = [r[2] for r in results]
+                except IndexError:
+                    blob = None
+
+        # ensure blob has the right shape
+        if blob is None:
+            blob = [None]*self.nwalkers
+
+        if storechain:
             # Prepare arrays for storage ahead of time
             self._chain = np.concatenate(
                 (self._chain, np.zeros((iterations, self.nwalkers, self.dim))))
@@ -252,10 +285,15 @@ class Sampler(object):
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
                 try:
-                    results = np.array(m(GetLnProbWrapper(self._get_lnpost,
-                                                          self._kde), p_p))
-                    lnpost_p = results[:, 0]
-                    lnprop_p = results[:, 1]
+                    results = list(m(GetLnProbWrapper(self._get_lnpost,
+                                                      self._kde), p_p))
+
+                    lnpost_p = np.array([r[0] for r in results])
+                    lnprop_p = np.array([r[1] for r in results])
+                    try:
+                        blob_p = [r[2] for r in results]
+                    except IndexError:
+                        blob_p = None
 
                 # Catch any exceptions and exit gracefully
                 except Exception as e:
@@ -283,12 +321,23 @@ class Sampler(object):
                     lnpost[acc] = lnpost_p[acc]
                     lnprop[acc] = lnprop_p[acc]
 
-                if self.store_chain:
+                    if blob_p:
+                        blob = [blob_p[i] if a else blob[i] for a in acc]
+                    else:
+                        blob = None
+
+                if storechain:
                     # Store stuff
                     self._chain[self.iterations, :, :] = p
                     self._lnpost[self.iterations, :] = lnpost
                     self._lnprop[self.iterations, :] = lnprop
                     self._acceptance[self.iterations, :] = acc
+
+                    if blob:
+                        self._blobs.append(blob)
+                else:
+                    # create generator for sampled points
+                    yield p, lnpost, lnprop, blob
 
                 self.iterations += 1
 
@@ -300,7 +349,7 @@ class Sampler(object):
                 self.rollback(self.iterations)
                 raise
 
-        return (p, lnpost, lnprop)
+        return p, lnpost, lnprop, blob
 
     def draw(self, N):
         """
@@ -322,6 +371,13 @@ class Sampler(object):
             with shape ``(iterations, nwalkers, ndim)``.
         """
         return self._chain
+
+    @property
+    def blobs(self):
+        """
+        Ensemble's past metadata
+        """
+        return self._blobs
 
     @property
     def lnpost(self):
@@ -378,11 +434,11 @@ class Sampler(object):
         Shrink arrays down to a length of ``iteration`` and reset the
         pool if there is one.
         """
-        if self.store_chain:
-            self._chain = self._chain[:iteration]
-            self._lnpost = self._lnpost[:iteration]
-            self._lnprop = self._lnprop[:iteration]
-            self._acceptance = self._acceptance[:iteration]
+        self._chain = self._chain[:iteration]
+        self._lnpost = self._lnpost[:iteration]
+        self._lnprop = self._lnprop[:iteration]
+        self._acceptance = self._acceptance[:iteration]
+        self._blobs = self._blobs[:iteration]
 
         # Close the old pool and open a new one
         if self.processes != 1 and isinstance(self.pool, Pool):
