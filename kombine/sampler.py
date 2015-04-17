@@ -140,10 +140,14 @@ class Sampler(object):
             if self.iterations + test_interval > max_iter:
                 break
 
-            p, lnpost, lnprop, blob = self.sample(p0, lnpost0, lnprop0, blob0,
-                                                  iterations=test_interval,
-                                                  update_interval=update_interval,
-                                                  storechain=True)
+            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
+                                    update_interval=update_interval,
+                                    storechain=True)
+            try:
+                p, lnpost, lnprop, blob = results
+            except ValueError:
+                p, lnpost, lnprop = results
+                blob = None
 
             burned_in = True
             for par in range(self.dim):
@@ -177,12 +181,15 @@ class Sampler(object):
         if not burned_in:
             print "Burnin unsuccessful."
 
-        return p, lnpost, lnprop, blob
+        if blob:
+            return p, lnpost, lnprop, blob
+        else:
+            return p, lnpost, lnprop
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                iterations=1, update_interval=10, storechain=True):
         """
-        Advance the ensemble ``iterations`` steps.
+        Advance the ensemble ``iterations`` steps as a generator.
 
         :param p0 (optional):
             A list of the initial walker positions of shape
@@ -335,9 +342,6 @@ class Sampler(object):
 
                     if blob:
                         self._blobs.append(blob)
-                else:
-                    # create generator for sampled points
-                    yield p, lnpost, lnprop, blob
 
                 self.iterations += 1
 
@@ -345,11 +349,15 @@ class Sampler(object):
                 if self.iterations % update_interval == 0:
                     self._kde = optimized_kde(p, pool=self.pool)
 
+                # create generator for sampled points
+                if blob:
+                    yield p, lnpost, lnprop, blob
+                else:
+                    yield p, lnpost, lnprop
+
             except KeyboardInterrupt:
                 self.rollback(self.iterations)
                 raise
-
-        return p, lnpost, lnprop, blob
 
     def draw(self, N):
         """
@@ -444,3 +452,58 @@ class Sampler(object):
         if self.processes != 1 and isinstance(self.pool, Pool):
             self.pool.close()
             self.pool = Pool(self.processes)
+
+    def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None,
+                 **kwargs):
+        """
+        Iterate `sample` for ``N`` iterations and return the result.
+        :param N:
+            The number of steps to take.
+
+        :param p0 (optional):
+            A list of the initial walker positions of shape
+            ``(nwalkers, dim)``.  If ``None`` and a proposal distribution
+            exists, walker positions will be drawn from the proposal.
+
+        :param lnpost0: (optional)
+            The list of log posterior probabilities for the walkers at
+            positions ``p0``. If ``lnpost0 is None``, the initial
+            values are calculated. It should have the shape
+            ``(nwalkers, dim)``.
+
+        :param lnprop0: (optional)
+            The list of log proposal densities for the walkers at
+            positions ``p0``. If ``lnprop0 is None``, the initial
+            values are calculated. It should have the shape
+            ``(nwalkers, dim)``.
+
+        :param blob0: (optional)
+            The list of blob data for the walkers at positions ``p0``.
+            If ``blob0 is None`` but ``lnpost0`` and ``lnprop0`` are
+            given, the likelihood function is assumed not
+            to return blob data and it is not recomputed.
+
+        :param kwargs: (optional)
+            The rest is passed to the `sample method.
+
+        Results of the final sample in the form that `sample` yields are
+        returned.  Usually you'll get:
+        ``p``, ``lnpost``, ``lnprop``, ``blob``(optional)
+        """
+        if p0 is None:
+            if self._last_run_mcmc_result is None:
+                raise ValueError("Cannot have p0=None if the sampler hasn't "
+                                 "been called.")
+            p0 = self._last_run_mcmc_result[0]
+            if lnpost0 is None:
+                lnpost0 = self._last_run_mcmc_result[1]
+            if lnprop0 is None:
+                lnprop0 = self._last_run_mcmc_result[2]
+
+        for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
+            pass
+
+        # Store the results for later continuation and toss out the blob
+        self._last_run_mcmc_result = results[:3]
+
+        return results
