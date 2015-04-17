@@ -80,7 +80,7 @@ sampler = kombine.Sampler(nwalkers, ndim, lnprob)
 p = lnprob.prior_draw(nwalkers)
 
 # Sample for a bit
-p, prob, q = sampler.sample(p, iterations=200)
+p, prob, q = sampler.run_mcmc(200, p)
 
 if triangle is None:
     print "Get triangle.py for some awesome corner plots!"
