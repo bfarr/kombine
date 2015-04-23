@@ -67,7 +67,7 @@ class Sampler(object):
 
         self._failed_p = None
 
-    def burnin(self, p0, lnpost0=None, lnprop0=None, blob0=None,
+    def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                update_interval=10, max_steps=None,
                critical_pval=0.05):
         """
@@ -75,9 +75,10 @@ class Sampler(object):
         interval over which distributions are compared will be adapted based
         on the average acceptance rate of the walkers.
 
-        :param p0:
+        :param p0: (optional)
             A list of the initial walker positions.  It should have the
-            shape ``(nwalkers, dim)``.
+            shape ``(nwalkers, dim)``.  If ``None`` and the sampler has been
+            run previously, it'll pick up where it left off.
 
         :param lnpost0: (optional)
             The list of log posterior probabilities for the walkers at
@@ -120,7 +121,8 @@ class Sampler(object):
           with shape ``(nwalkers,)`` if returned by ``lnpostfn`` else None
 
         """
-        p0 = np.array(p0)
+        if p0 is not None:
+            p0 = np.atleast_2d(p0)
 
         # Start the K-S testing interval at the update interval length
         test_interval = update_interval
@@ -160,8 +162,16 @@ class Sampler(object):
             # Adjust the interval so >~ 90% of walkers accept a jump
             if not burned_in:
                 # Use the average acceptance of the last step to window
-                #   over the last 10 accepted jumps (on average)
-                window = int(min(10, self.iterations) * 1/np.mean(self.acceptance[-1]))
+                #   over the last 10 accepted jumps (on average).  A floor
+                #   acceptance rate of 1% is used in case no jumps were accepted
+                #   in the last step.
+                avg_nacc = 10
+                floor_acc_rate = 0.01
+
+                # Don't look back too far early in the run
+                nacc_window = min(avg_nacc, self.iterations)
+                window = int(nacc_window * 1/max(np.mean(self.acceptance[-1]), floor_acc_rate))
+
                 acceptance_rates = np.mean(self.acceptance[-window:], axis=0)
 
                 # Use the first decile of the walkers' acceptance rates to

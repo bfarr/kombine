@@ -6,13 +6,14 @@ from scipy.cluster.vq import kmeans, vq
 import multiprocessing as mp
 
 
-def optimized_kde(data, pool=None):
+def optimized_kde(data, pool=None, **kwargs):
     """
     Iteratively run a k-means clustering algorithm, estimating the distibution
     of each identified cluster with an independent kernel density estimate.
     Starting with k = 1, the distribution is estimated and the Bayes
     Information criterion (BIC) is calculated.  k is increased until the BIC
-    stops increasing.  Returns the KDE with the best BIC.
+    stops increasing.  ``kwargs`` are passed to ``ClusteredKDE``.  Returns the
+    KDE with the best BIC.
 
     :param data:
         An N x ndim array, containing N samples from the target distribution.
@@ -24,7 +25,7 @@ def optimized_kde(data, pool=None):
     k = 1
     while True:
         try:
-            kde = ClusteredKDE(data, k)
+            kde = ClusteredKDE(data, k, **kwargs)
             bic = kde.bic(pool=pool)
         except la.LinAlgError:
             bic = -np.inf
