@@ -1,8 +1,9 @@
 import numpy as np
+import numpy.ma as ma
 from scipy.stats import ks_2samp
 
 from .interruptible_pool import Pool
-from .clustered_kde import optimized_kde
+from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 
 class GetLnProbWrapper(object):
@@ -24,6 +25,7 @@ class GetLnProbWrapper(object):
             lnpost = result
             return lnpost, kde
 
+
 class Sampler(object):
     """
     An Ensemble sampler.
@@ -35,15 +37,22 @@ class Sampler(object):
         The number of individual MCMC chains to include in the ensemble.
 
     :param dim:
-        Number of dimensions in the parameter space.
+        Number of dimensions in the parameter space.  If ``transd`` is ``True``
+        this is the maximum number of dimensions.
 
     :param lnpostfn:
         A function that takes a vector in the parameter space as input and
         returns the natural logarithm of the posterior probability for that
         position.
 
+    :param transd:
+        If ``True``, the sampler will operate across parameter spaces using
+        a ``TransdimensionalKDE`` proposal distribution. In this mode a masked
+        array with samples in each of the possible sets of dimensions must
+        be given for the initial ensemble distribution.
+
     """
-    def __init__(self, nwalkers, ndim, lnpostfn,
+    def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
                  processes=None, pool=None):
         self.nwalkers = nwalkers
         self.dim = ndim
@@ -51,25 +60,31 @@ class Sampler(object):
         self._get_lnpost = lnpostfn
 
         self.iterations = 0
-
-        self._kde = None
+        self.stored_iterations = 0
 
         self.pool = pool
         self.processes = processes
         if self.processes is not None and self.processes > 1 and self.pool is None:
             self.pool = Pool(self.processes)
 
-        self._chain = np.empty((0, self.nwalkers, self.dim))
+        self._transd = transd
+        if self._transd:
+            self._chain = ma.masked_values(np.zeros((0, self.nwalkers, self.dim)), 0)
+            self.update_proposal = TransdimensionalKDE
+        else:
+            self._chain = np.zeros((0, self.nwalkers, self.dim))
+            self.update_proposal = optimized_kde
+
         self._lnpost = np.empty((0, self.nwalkers))
         self._lnprop = np.empty((0, self.nwalkers))
         self._acceptance = np.zeros((0, self.nwalkers))
         self._blobs = []
 
+        self._last_run_mcmc_result = None
         self._failed_p = None
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               update_interval=10, max_steps=None,
-               critical_pval=0.05):
+               update_interval=10, max_steps=None, critical_pval=0.05):
         """
         Use two-sample K-S tests to determine when burnin is complete.  The
         interval over which distributions are compared will be adapted based
@@ -121,8 +136,11 @@ class Sampler(object):
           with shape ``(nwalkers,)`` if returned by ``lnpostfn`` else None
 
         """
+        if self._transd:
+            raise NotImplementedError('Auto-burnin not implemented for trans-dimensional sampling.')
+
         if p0 is not None:
-            p0 = np.atleast_2d(p0)
+            p0 = np.atleast_2d(p0).reshape(self.nwalkers, -1)
         else:
             p0 = self.draw(self.nwalkers)
 
@@ -145,13 +163,12 @@ class Sampler(object):
                 break
 
             results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
-                                    update_interval=update_interval,
-                                    storechain=True)
+                                    update_interval=update_interval, storechain=True)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
-                p, lnpost, lnprop = results
                 blob = None
+                p, lnpost, lnprop = results
 
             burned_in = True
             for par in range(self.dim):
@@ -193,13 +210,13 @@ class Sampler(object):
         if not burned_in:
             print "Burnin unsuccessful."
 
-        if blob:
-            return p, lnpost, lnprop, blob
-        else:
+        if blob is None:
             return p, lnpost, lnprop
+        else:
+            return p, lnpost, lnprop, blob
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               iterations=1, update_interval=10, kde_size=None, storechain=True):
+               iterations=1, kde=None, update_interval=10, kde_size=None, storechain=True):
         """
         Advance the ensemble ``iterations`` steps as a generator.
 
@@ -228,6 +245,9 @@ class Sampler(object):
 
         :param iterations: (optional)
             The number of steps to run.
+
+        :param kde: (optional)
+            An already-constucted KDE with `__call__` and `draw` methods.
 
         :param update_interval: (optional)
             The number of steps between proposal updates.
@@ -260,7 +280,10 @@ class Sampler(object):
         if p0 is None:
             p = self.draw(self.nwalkers)
         else:
-            p = np.array(p0)
+            if not isinstance(p0, np.ndarray):
+                p = np.array(p0)
+            else:
+                p = p0
 
         if self.pool is None:
             m = map
@@ -272,16 +295,16 @@ class Sampler(object):
         if self._kde_size is None:
             self._kde_size = 2*self.nwalkers
 
+        self._kde = kde
         if self._kde is None:
-            self._kde = optimized_kde(p, max_samples=self._kde_size, pool=self.pool)
+            self._kde = self.update_proposal(p, max_samples=self._kde_size, pool=self.pool)
 
         lnpost = lnpost0
         lnprop = lnprop0
         blob = blob0
 
         if lnpost is None or lnprop is None:
-            results = list(m(GetLnProbWrapper(self._get_lnpost,
-                                              self._kde), p))
+            results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde), p))
             lnpost = np.array([r[0] for r in results]) if lnpost is None else lnpost
             lnprop = np.array([r[1] for r in results]) if lnprop is None else lnprop
 
@@ -295,16 +318,18 @@ class Sampler(object):
         if blob is None:
             blob = [None]*self.nwalkers
 
+        # Prepare arrays for storage ahead of time
         if storechain:
-            # Prepare arrays for storage ahead of time
-            self._chain = np.concatenate(
-                (self._chain, np.zeros((iterations, self.nwalkers, self.dim))))
-            self._lnpost = np.concatenate(
-                (self._lnpost, np.zeros((iterations, self.nwalkers))))
-            self._lnprop = np.concatenate(
-                (self._lnprop, np.zeros((iterations, self.nwalkers))))
-            self._acceptance = np.concatenate(
-                (self._acceptance, np.zeros((iterations, self.nwalkers))))
+            ext = np.zeros((iterations, self.nwalkers, self.dim))
+            # Make sure to mask things if the stored chain has a mask
+            if hasattr(self._chain, "mask"):
+                ext = ma.masked_values(ext, 0)
+
+            self._chain = np.concatenate((self._chain, ext))
+            self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
+            self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
+            self._acceptance = np.concatenate((self._acceptance,
+                                               np.zeros((iterations, self.nwalkers))))
 
         for i in xrange(int(iterations)):
             try:
@@ -314,8 +339,7 @@ class Sampler(object):
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
                 try:
-                    results = list(m(GetLnProbWrapper(self._get_lnpost,
-                                                      self._kde), p_p))
+                    results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde), p_p))
 
                     lnpost_p = np.array([r[0] for r in results])
                     lnprop_p = np.array([r[1] for r in results])
@@ -350,10 +374,10 @@ class Sampler(object):
                     lnpost[acc] = lnpost_p[acc]
                     lnprop[acc] = lnprop_p[acc]
 
-                    if blob_p:
-                        blob = [blob_p[i] if a else blob[i] for i,a in enumerate(acc)]
-                    else:
+                    if blob_p is None:
                         blob = None
+                    else:
+                        blob = [blob_p[i] if a else blob[i] for i,a in enumerate(acc)]
 
                 if storechain:
                     # Store stuff
@@ -369,8 +393,8 @@ class Sampler(object):
 
                 # Update the proposal at the requested interval
                 if self.iterations % update_interval == 0:
-                    self._kde = optimized_kde(p, pool=self.pool, kde=self._kde,
-                                              max_samples=self._kde_size)
+                    self._kde = self.update_proposal(p, pool=self.pool, kde=self._kde,
+                                                     max_samples=self._kde_size)
 
                 # create generator for sampled points
                 if blob:
@@ -476,8 +500,7 @@ class Sampler(object):
             self.pool.close()
             self.pool = Pool(self.processes)
 
-    def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-                 **kwargs):
+    def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None, **kwargs):
         """
         Iterate `sample` for ``N`` iterations and return the result.
         :param N:

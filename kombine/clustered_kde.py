@@ -98,10 +98,8 @@ class ClusteredKDE(object):
         self._centroids, _ = kmeans(self._data, k)
         self._assignments, _ = vq(self._data, self._centroids)
 
-        self._kdes = [KDE(self._data[self._assignments == c])
-                      for c in range(k)]
-        self._logweights = np.log(
-            [np.sum(self._assignments == c)/float(self._N) for c in range(k)])
+        self._kdes = [KDE(self._data[self._assignments == c]) for c in range(k)]
+        self._logweights = np.log([np.sum(self._assignments == c)/float(self._N) for c in range(k)])
 
     def draw(self, N=1):
         # Draws clusters randomly with the assigned weights
@@ -207,8 +205,7 @@ class KDE(object):
             return []
 
         # Draw vanilla samples from a zero-mean multivariate Gaussian
-        X = np.random.multivariate_normal(np.zeros(self._dim),
-                                          self._kernel_cov, size=N)
+        X = np.random.multivariate_normal(np.zeros(self._dim), self._kernel_cov, size=N)
 
         # Pick N random kernels as means
         kernels = np.random.randint(0, self._N, N)
@@ -243,7 +240,14 @@ class KDE(object):
 
 
 def unique_spaces(mask):
+    """
+    Determine the unique sets of dimensions based on a mask.  Inverted
+    1D masks are returned to use a selectors.
+    """
     ncols = mask.shape[1]
+
+    # Do some magic with views so ``unique`` can be used to find the unique
+    #   sets of dimensions.
     dtype = mask.dtype.descr * ncols
     struct = mask.view(dtype)
 
@@ -251,15 +255,17 @@ def unique_spaces(mask):
     uniq = uniq.view(mask.dtype).reshape(-1, ncols)
     return ~uniq
 
+
 class TransdimensionalKDE(object):
     """
-    A Gaussian kernel density estimator that provides means for evaluating
-    the estimated probability density function, and drawing additional samples
-    from the estimated distribution.  Cholesky decomposition of the covariance
-    makes this class a bit more stable than the scipy KDE.
+    A generalized Gaussian kernel density estimator that reads masked arrays,
+    constructs a ``ClusteredKDE`` using ``optimized_kde`` for each unique
+    parameter space, then weighs the KDEs based on the number of samples in
+    each parameter space.
 
     :param data:
-        An N x ndim array, containing N samples from the target distribution.
+        An N x max_dim masked array, containing N samples from the
+        the target distribution.
 
     """
     def __init__(self, data, pool=None):
@@ -268,12 +274,17 @@ class TransdimensionalKDE(object):
         self._max_dim = max_dim
         self._data = data
 
+        # Save an (inverted) mask for each unique set of dimensions
         self._spaces = unique_spaces(data.mask)
 
+        # Construct a separate clustered-KDE for each parameter space
         self._kdes = []
         weights = []
         for space in self._spaces:
+            # Construct a selector for the samples from this space
             sel = np.all(~data.mask == space, axis=1)
+
+            # Send only unmasked values to the KDE constructor
             N = np.sum(sel)
             X = data[sel]
             X = X[~X.mask].reshape((N, -1))
@@ -284,7 +295,7 @@ class TransdimensionalKDE(object):
 
     def draw(self, N=1):
         """
-        Draw samples from the estimated distribution.
+        Draw samples from the transdimensional distribution.
         """
         # Draws spaces randomly with the assigned weights
         cumulative_weights = np.cumsum(np.exp(self._logweights))
@@ -295,13 +306,20 @@ class TransdimensionalKDE(object):
             sel = space_inds == s
             n = np.sum(sel)
             if n > 0:
-                draws[sel, self._spaces[s]] = self._kdes[s].draw(n)
+                # Populate only the valid entries for this parameter space
+                draws[np.ix_(sel, self._spaces[s])] = self._kdes[s].draw(n)
 
         return draws
 
     def logpdf(self, X, pool=None):
+        """
+        Evaluate the transdimensional probability.
+        """
         logpdfs = []
-        for logweight, space, kde in zip(self._logweights, self._spaces, self._kdes):
+        for logweight, space, kde in zip(self._logweights,
+                                         self._spaces,
+                                         self._kdes):
+            # Calculate the probability for each parameter space individually
             if np.all(space == ~X.mask):
                 logpdfs.append(logweight + kde(X[space], pool=pool))
 
