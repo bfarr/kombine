@@ -350,7 +350,7 @@ class Sampler(object):
 
                 # Catch any exceptions and exit gracefully
                 except Exception as e:
-                    self.rollback(self.iterations)
+                    self.rollback(self.stored_iterations)
                     self._failed_p = p_p
 
                     print "Offending samples stored in ``failed_p``."
@@ -381,13 +381,15 @@ class Sampler(object):
 
                 if storechain:
                     # Store stuff
-                    self._chain[self.iterations, :, :] = p
-                    self._lnpost[self.iterations, :] = lnpost
-                    self._lnprop[self.iterations, :] = lnprop
-                    self._acceptance[self.iterations, :] = acc
+                    self._chain[self.stored_iterations, :, :] = p
+                    self._lnpost[self.stored_iterations, :] = lnpost
+                    self._lnprop[self.stored_iterations, :] = lnprop
+                    self._acceptance[self.stored_iterations, :] = acc
 
                     if blob:
                         self._blobs.append(blob)
+
+                    self.stored_iterations += 1
 
                 self.iterations += 1
 
@@ -403,7 +405,7 @@ class Sampler(object):
                     yield p, lnpost, lnprop
 
             except KeyboardInterrupt:
-                self.rollback(self.iterations)
+                self.rollback(self.stored_iterations)
                 raise
 
     def draw(self, N):
