@@ -538,15 +538,35 @@ class Sampler(object):
         returned.  Usually you'll get:
         ``p``, ``lnpost``, ``lnprop``, ``blob``(optional)
         """
+        if self.pool is None:
+            m = map
+        else:
+            m = self.pool.map
+
         if p0 is None:
             if self._last_run_mcmc_result is None:
-                raise ValueError("Cannot have p0=None if the sampler hasn't "
-                                 "been called.")
-            p0 = self._last_run_mcmc_result[0]
+                try:
+                    p0 = self.chain[-1]
+                    if lnpost0 is None:
+                        lnpost0 = self.lnpost[-1]
+                    if lnprop0 is None:
+                        lnprop0 = self.lnprop[-1]
+                except IndexError:
+                    raise ValueError("Cannot have p0=None if the sampler hasn't been called.")
+            else:
+                p0 = self._last_run_mcmc_result[0]
+                if lnpost0 is None:
+                    lnpost0 = self._last_run_mcmc_result[1]
+                if lnprop0 is None:
+                    lnprop0 = self._last_run_mcmc_result[2]
+
+        if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
+            results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde), p0))
+
             if lnpost0 is None:
-                lnpost0 = self._last_run_mcmc_result[1]
+                lnpost0 = np.array([r[0] for r in results])
             if lnprop0 is None:
-                lnprop0 = self._last_run_mcmc_result[2]
+                lnprop0 = np.array([r[1] for r in results])
 
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
             pass
