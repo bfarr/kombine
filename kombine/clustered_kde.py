@@ -6,7 +6,7 @@ from scipy.cluster.vq import kmeans, vq
 import multiprocessing as mp
 
 
-def optimized_kde(data, pool=None, **kwargs):
+def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
     """
     Iteratively run a k-means clustering algorithm, estimating the distibution
     of each identified cluster with an independent kernel density estimate.
@@ -18,7 +18,37 @@ def optimized_kde(data, pool=None, **kwargs):
     :param data:
         An N x ndim array, containing N samples from the target distribution.
 
+    :param pool: (optional)
+        A pool of processes with `map` function to use.
+
+    :param kde: (optional)
+        An old KDE to update, instead of starting a new one from scratch.
+
+    :param max_samples: (optional)
+        The maximum number of samples to use for constructing or updating the kde.
+        If a KDE is supplied and adding the samples from `data` will go over this,
+        old samples are thinned by factors of two until under the limit.
+
     """
+    # Trim data if too many samples were given
+    n_new = len(data)
+    if max_samples is not None and max_samples <= n_new:
+        data = data[:max_samples]
+
+    else:
+        # Combine data, thinning old data if we need room
+        if kde is not None:
+            old_data = kde._color(kde._data)
+
+            if max_samples is not None:
+                N = len(old_data) + n_new
+
+                while N > max_samples:
+                    old_data = old_data[::2]
+                    N = len(old_data) + n_new
+
+            data = np.concatenate((old_data, data))
+
     best_bic = -np.inf
     best_kde = None
 

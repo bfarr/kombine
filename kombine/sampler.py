@@ -199,7 +199,7 @@ class Sampler(object):
             return p, lnpost, lnprop
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               iterations=1, update_interval=10, storechain=True):
+               iterations=1, update_interval=10, kde_size=None, storechain=True):
         """
         Advance the ensemble ``iterations`` steps as a generator.
 
@@ -232,6 +232,12 @@ class Sampler(object):
         :param update_interval: (optional)
             The number of steps between proposal updates.
 
+        :param kde_size: (optional)
+            Maximum sample size for KDE construction.  When the KDE is updated,
+            existing samples are thinned by factors of two until there's enough
+            room for ``nwalkers`` new samples.  The default is 2*``nwalkers``,
+            and must be greater than ``nwalkers`` if specified.
+
         :param storechain: (optional)
             Whether to keep the chain and posterior values in memory or
             return them step-by-step as a generator
@@ -262,8 +268,12 @@ class Sampler(object):
             m = self.pool.map
 
         # Build a proposal if one doesn't already exist
+        self._kde_size = kde_size
+        if self._kde_size is None:
+            self._kde_size = 2*self.nwalkers
+
         if self._kde is None:
-            self._kde = optimized_kde(p, pool=self.pool)
+            self._kde = optimized_kde(p, max_samples=self._kde_size, pool=self.pool)
 
         lnpost = lnpost0
         lnprop = lnprop0
@@ -359,7 +369,8 @@ class Sampler(object):
 
                 # Update the proposal at the requested interval
                 if self.iterations % update_interval == 0:
-                    self._kde = optimized_kde(p, pool=self.pool)
+                    self._kde = optimized_kde(p, pool=self.pool, kde=self._kde,
+                                              max_samples=self._kde_size)
 
                 # create generator for sampled points
                 if blob:
@@ -496,7 +507,7 @@ class Sampler(object):
             to return blob data and it is not recomputed.
 
         :param kwargs: (optional)
-            The rest is passed to the `sample method.
+            The rest is passed to the `sample` method.
 
         Results of the final sample in the form that `sample` yields are
         returned.  Usually you'll get:
