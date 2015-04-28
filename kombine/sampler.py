@@ -339,7 +339,7 @@ class Sampler(object):
                     lnprop[acc] = lnprop_p[acc]
 
                     if blob_p:
-                        blob = [blob_p[i] if a else blob[i] for a in acc]
+                        blob = [blob_p[i] if a else blob[i] for i,a in enumerate(acc)]
                     else:
                         blob = None
 
