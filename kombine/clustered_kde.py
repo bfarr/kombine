@@ -6,6 +6,9 @@ from scipy.cluster.vq import kmeans, vq
 
 import multiprocessing as mp
 
+# Avoid log(0) warnings when weights go to 0
+np.seterr(divide='ignore')
+
 
 def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
     """
@@ -23,7 +26,7 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
         A pool of processes with `map` function to use.
 
     :param kde: (optional)
-        An old KDE to update, instead of starting a new one from scratch.
+        An old KDE to inherit samples from.
 
     :param max_samples: (optional)
         The maximum number of samples to use for constructing or updating the kde.
@@ -33,6 +36,14 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
     """
     # Trim data if too many samples were given
     n_new = len(data)
+
+    # Ignore the uniform-transd arg, since we're in fixed-D from here on out
+    if "uniform_weight" in kwargs:
+        kwargs.pop("uniform_weight")
+
+    if kde is None and n_new == 0:
+        return None
+
     if max_samples is not None and max_samples <= n_new:
         data = data[:max_samples]
 
@@ -48,7 +59,12 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
                     old_data = old_data[::2]
                     N = len(old_data) + n_new
 
-            data = np.concatenate((old_data, data))
+            if n_new == 0:
+                # If there's no new data, just use the old
+                data = old_data
+            else:
+                # Otherwise combine the old and the new
+                data = np.concatenate((old_data, data))
 
     best_bic = -np.inf
     best_kde = None
@@ -267,29 +283,53 @@ class TransdimensionalKDE(object):
         An N x max_dim masked array, containing N samples from the
         the target distribution.
 
-    """
-    def __init__(self, data, pool=None):
-        N, max_dim = data.shape
-        self._N = N
-        self._max_dim = max_dim
-        self._data = data
+    :param uniform_weight: (optional)
+        When `True`, weight is placed evenly across parameter spaces.  This is
+        useful during burnin, when one parameter space may burnin faster than others.
 
-        # Save an (inverted) mask for each unique set of dimensions
-        self._spaces = unique_spaces(data.mask)
+    :param kde: (optional)
+        An old trans-dimensional KDE to inherit samples from.
+
+    :param max_samples: (optional)
+        The maximum number of samples to use for constructing or updating the kde
+        in each unique parameter space. If a KDE is supplied and adding the samples
+        from `data` will go over this, old samples are thinned by factors of two
+        until under the limit in each parameter space.
+
+    """
+    def __init__(self, data, uniform_weight=False, kde=None, max_samples=None, pool=None):
+        N_new, max_dim = data.shape
+        self._max_dim = max_dim
+
+        if kde is None:
+            # Save an (inverted) mask for each unique set of dimensions
+            self._spaces = unique_spaces(data.mask)
+        else:
+            # Inherit old space definitions, in case the new sample has no points in a subspace
+            self._spaces = kde._spaces
 
         # Construct a separate clustered-KDE for each parameter space
-        self._kdes = []
         weights = []
-        for space in self._spaces:
+        self._kdes = []
+        for i, space in enumerate(self._spaces):
             # Construct a selector for the samples from this space
-            sel = np.all(~data.mask == space, axis=1)
+            subspace = np.all(~data.mask == space, axis=1)
 
-            # Send only unmasked values to the KDE constructor
-            N = np.sum(sel)
-            X = data[sel]
-            X = X[~X.mask].reshape((N, -1))
-            self._kdes.append(optimized_kde(X, pool=pool))
-            weights.append(N/float(self._N))
+            # Determine weights from only the new samples
+            N_subspace = np.sum(subspace)
+            weight = N_subspace/float(N_new)
+            weight = 1/float(len(self._spaces))
+            weights.append(weight)
+
+            X = data[subspace]
+            if N_subspace > 0:
+                X = X[~X.mask].reshape((N_subspace, -1))
+
+            old_kde = None
+            if kde is not None:
+                old_kde = kde._kdes[i]
+
+            self._kdes.append(optimized_kde(X, max_samples=max_samples, kde=old_kde, pool=pool))
 
         self._logweights = np.log(np.array(weights))
 
@@ -301,7 +341,7 @@ class TransdimensionalKDE(object):
         cumulative_weights = np.cumsum(np.exp(self._logweights))
         space_inds = np.searchsorted(cumulative_weights, np.random.rand(N))
 
-        draws = ma.masked_values(np.zeros((N, self._max_dim)), 0)
+        draws = ma.masked_all((N, self._max_dim))
         for s in xrange(len(self._spaces)):
             sel = space_inds == s
             n = np.sum(sel)
@@ -320,7 +360,7 @@ class TransdimensionalKDE(object):
                                          self._spaces,
                                          self._kdes):
             # Calculate the probability for each parameter space individually
-            if np.all(space == ~X.mask):
+            if np.all(space == ~X.mask) and np.isfinite(logweight):
                 logpdfs.append(logweight + kde(X[space], pool=pool))
 
         return logsumexp(logpdfs, axis=0)

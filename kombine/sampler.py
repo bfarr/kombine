@@ -56,6 +56,7 @@ class Sampler(object):
                  processes=None, pool=None):
         self.nwalkers = nwalkers
         self.dim = ndim
+        self._kde = None
 
         self._get_lnpost = lnpostfn
 
@@ -69,7 +70,7 @@ class Sampler(object):
 
         self._transd = transd
         if self._transd:
-            self._chain = ma.masked_values(np.zeros((0, self.nwalkers, self.dim)), 0)
+            self._chain = ma.masked_all((0, self.nwalkers, self.dim))
             self.update_proposal = TransdimensionalKDE
         else:
             self._chain = np.zeros((0, self.nwalkers, self.dim))
@@ -216,7 +217,8 @@ class Sampler(object):
             return p, lnpost, lnprop, blob
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               iterations=1, kde=None, update_interval=10, kde_size=None, storechain=True):
+               iterations=1, kde=None, update_interval=10, kde_size=None,
+               uniform_transd=False, storechain=True):
         """
         Advance the ensemble ``iterations`` steps as a generator.
 
@@ -258,6 +260,11 @@ class Sampler(object):
             room for ``nwalkers`` new samples.  The default is 2*``nwalkers``,
             and must be greater than ``nwalkers`` if specified.
 
+        :param uniform_trans: (optional)
+            If `True` when transdimensional sampling, weight is assigned uniformly
+            across parameter spaces in the proposal distribution.  This helps to
+            avoid races for burnin of each parameter space.
+
         :param storechain: (optional)
             Whether to keep the chain and posterior values in memory or
             return them step-by-step as a generator
@@ -295,9 +302,9 @@ class Sampler(object):
         if self._kde_size is None:
             self._kde_size = 2*self.nwalkers
 
-        self._kde = kde
-        if self._kde is None:
-            self._kde = self.update_proposal(p, max_samples=self._kde_size, pool=self.pool)
+        if kde is None and self._kde is None:
+            self._kde = self.update_proposal(p, uniform_weight=uniform_transd,
+                                             max_samples=self._kde_size, pool=self.pool)
 
         lnpost = lnpost0
         lnprop = lnprop0
@@ -320,12 +327,14 @@ class Sampler(object):
 
         # Prepare arrays for storage ahead of time
         if storechain:
-            ext = np.zeros((iterations, self.nwalkers, self.dim))
             # Make sure to mask things if the stored chain has a mask
             if hasattr(self._chain, "mask"):
-                ext = ma.masked_values(ext, 0)
+                self._chain = ma.concatenate((self._chain,
+                                              ma.masked_all((iterations, self.nwalkers, self.dim))))
+            else:
+                self._chain = np.concatenate((self._chain,
+                                              np.zeros((iterations, self.nwalkers, self.dim))))
 
-            self._chain = np.concatenate((self._chain, ext))
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
             self._acceptance = np.concatenate((self._acceptance,
@@ -395,7 +404,8 @@ class Sampler(object):
 
                 # Update the proposal at the requested interval
                 if self.iterations % update_interval == 0:
-                    self._kde = self.update_proposal(p, pool=self.pool, kde=self._kde,
+                    self._kde = self.update_proposal(p, uniform_weight=uniform_transd,
+                                                     pool=self.pool, kde=self._kde,
                                                      max_samples=self._kde_size)
 
                 # create generator for sampled points
@@ -560,13 +570,14 @@ class Sampler(object):
                 if lnprop0 is None:
                     lnprop0 = self._last_run_mcmc_result[2]
 
-        if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
-            results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde), p0))
+        if self._kde is not None:
+            if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
+                results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde), p0))
 
-            if lnpost0 is None:
-                lnpost0 = np.array([r[0] for r in results])
-            if lnprop0 is None:
-                lnprop0 = np.array([r[1] for r in results])
+                if lnpost0 is None:
+                    lnpost0 = np.array([r[0] for r in results])
+                if lnprop0 is None:
+                    lnprop0 = np.array([r[1] for r in results])
 
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
             pass
