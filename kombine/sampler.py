@@ -56,7 +56,7 @@ class Sampler(object):
 
         self.pool = pool
         self.processes = processes
-        if self.processes != 1 and self.pool is None:
+        if self.processes is not None and self.processes > 1 and self.pool is None:
             self.pool = Pool(self.processes)
 
         self._chain = np.empty((0, self.nwalkers, self.dim))
