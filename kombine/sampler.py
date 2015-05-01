@@ -20,7 +20,7 @@ class GetLnProbWrapper(object):
             lnpost = result[0]
             blob = result[1]
             return lnpost, kde, blob
-        except IndexError:
+        except (IndexError, TypeError):
             lnpost = result
             return lnpost, kde
 
