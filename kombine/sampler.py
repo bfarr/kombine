@@ -123,6 +123,8 @@ class Sampler(object):
         """
         if p0 is not None:
             p0 = np.atleast_2d(p0)
+        else:
+            p0 = self.draw(self.nwalkers)
 
         # Start the K-S testing interval at the update interval length
         test_interval = update_interval
