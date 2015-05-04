@@ -9,7 +9,7 @@ except ImportError:
 
 setup(
     name='kombine',
-    version='0.0.1',
+    version='0.1.0',
     description='An embarrassingly parallel, kernel-density-based\
                  ensemble sampler',
     author='Ben Farr',
