@@ -37,10 +37,6 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
     # Trim data if too many samples were given
     n_new = len(data)
 
-    # Ignore the uniform-transd arg, since we're in fixed-D from here on out
-    if "uniform_weight" in kwargs:
-        kwargs.pop("uniform_weight")
-
     if kde is None and n_new == 0:
         return None
 

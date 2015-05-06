@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.ma as ma
-from scipy.stats import ks_2samp
+from scipy.stats import binom_test
 
 from .interruptible_pool import Pool
 from .clustered_kde import optimized_kde, TransdimensionalKDE
@@ -36,9 +36,9 @@ class Sampler(object):
     :param nwalkers:
         The number of individual MCMC chains to include in the ensemble.
 
-    :param dim:
+    :param ndim:
         Number of dimensions in the parameter space.  If ``transd`` is ``True``
-        this is the maximum number of dimensions.
+        this is the number of unique dimensions across the parameter spaces.
 
     :param lnpostfn:
         A function that takes a vector in the parameter space as input and
@@ -51,12 +51,22 @@ class Sampler(object):
         array with samples in each of the possible sets of dimensions must
         be given for the initial ensemble distribution.
 
+    :param processes: (optional)
+        The number of processes to use with `multiprocessing`.  By default,
+        all available cores will be used.
+
+    :param pool: (optional)
+        A pre-constructed pool with a map method. If `None` a pool will be created
+        using multiprocessing.
+
     """
     def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
                  processes=None, pool=None):
         self.nwalkers = nwalkers
         self.dim = ndim
         self._kde = None
+        self._kde_size = self.nwalkers
+        self.updates = np.array([])
 
         self._get_lnpost = lnpostfn
 
@@ -71,10 +81,8 @@ class Sampler(object):
         self._transd = transd
         if self._transd:
             self._chain = ma.masked_all((0, self.nwalkers, self.dim))
-            self.update_proposal = TransdimensionalKDE
         else:
             self._chain = np.zeros((0, self.nwalkers, self.dim))
-            self.update_proposal = optimized_kde
 
         self._lnpost = np.empty((0, self.nwalkers))
         self._lnprop = np.empty((0, self.nwalkers))
@@ -85,7 +93,7 @@ class Sampler(object):
         self._failed_p = None
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               update_interval=10, max_steps=None, critical_pval=0.05):
+               test_steps=16, max_steps=None, **kwargs):
         """
         Use two-sample K-S tests to determine when burnin is complete.  The
         interval over which distributions are compared will be adapted based
@@ -111,16 +119,13 @@ class Sampler(object):
         :param blob0: (optional)
             The list of blob data for walkers at positions ``p0``.
 
-        :param update_interval: (optional)
-            The number of steps between proposal updates.
+        :param test_steps: (optional)
+            The (rough) number of accepted steps over which to check for acceptance
+            rate consistency. If you find burnin repeatedly ending prematurely try increasing this.
 
         :param max_steps: (optional)
             An absolute maximum number of steps to take, in case burnin
             is too painful.
-
-        :param critical_pval: (optional)
-            Burnin proceeds until all two-sample K-S p-values exceed this
-            threshold (default 0.05)
 
         After burning in, this method returns:
 
@@ -137,19 +142,12 @@ class Sampler(object):
           with shape ``(nwalkers,)`` if returned by ``lnpostfn`` else None
 
         """
-        if self._transd:
-            raise NotImplementedError('Auto-burnin not implemented for trans-dimensional sampling.')
-
         if p0 is not None:
-            p0 = np.atleast_2d(p0).reshape(self.nwalkers, -1)
-        else:
-            p0 = self.draw(self.nwalkers)
-
-        # Start the K-S testing interval at the update interval length
-        test_interval = update_interval
+            p0 = ma.atleast_2d(p0)
 
         # Determine the maximum iteration to look for
         start = self.iterations
+
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
@@ -157,59 +155,43 @@ class Sampler(object):
             # If max_steps < update interval, at least run to max_steps
             test_interval = min(test_interval, max_steps)
 
-        burned_in = False
-        while not burned_in:
+        step_size = 2
+        while step_size <= test_steps:
+            # Take one step to estimate acceptance rate
+            test_interval = 1
+            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
+                                    storechain=True, **kwargs)
+            try:
+                p, lnpost, lnprop, blob = results
+            except ValueError:
+                p, lnpost, lnprop = results
+                blob = None
+
+            # Use the fraction of acceptances in the last step to estimate acceptance rate
+            last_acc_rate = np.mean(self.acceptance[-1])
+
+            # Use the estimated acceptance rate to set the new test interval
+            test_interval = int(step_size*1./last_acc_rate)
+
             # Give up if we're about to exceed the maximum number of iterations
             if self.iterations + test_interval > max_iter:
                 break
 
-            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
-                                    update_interval=update_interval, storechain=True)
+            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
+                                    storechain=True, **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
-                blob = None
                 p, lnpost, lnprop = results
+                blob = None
 
-            burned_in = True
-            for par in range(self.dim):
-                KS, pval = ks_2samp(p0[:, par], p[:, par])
+            if self.consistent_acceptance_rate():
+                step_size *= 2
 
-                if pval < critical_pval:
-                    burned_in = False
-                    break
+            self.update_proposal(p, uniform_weight=True,
+                                 pool=self.pool, max_samples=self.nwalkers)
 
-            # Adjust the interval so >~ 90% of walkers accept a jump
-            if not burned_in:
-                # Use the average acceptance of the last step to window
-                #   over the last 10 accepted jumps (on average).  A floor
-                #   acceptance rate of 1% is used in case no jumps were accepted
-                #   in the last step.
-                avg_nacc = 10
-                floor_acc_rate = 0.01
-
-                # Don't look back too far early in the run
-                nacc_window = min(avg_nacc, self.iterations)
-                window = int(nacc_window * 1/max(np.mean(self.acceptance[-1]), floor_acc_rate))
-
-                acceptance_rates = np.mean(self.acceptance[-window:], axis=0)
-
-                # Use the first decile of the walkers' acceptance rates to
-                #  decide the next test interval
-                index = int(.1*self.nwalkers)
-                low_rate = np.sort(acceptance_rates)[index]
-
-                # If there is a lot of variance in acceptance rates, get
-                #   another 10 acceptances (on average) and check again.
-                if low_rate > 0.:
-                    test_interval = int(1./low_rate)
-                else:
-                    test_interval = window
-
-                p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
-
-        if not burned_in:
-            print "Burnin unsuccessful."
+            p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
 
         if blob is None:
             return p, lnpost, lnprop
@@ -217,8 +199,8 @@ class Sampler(object):
             return p, lnpost, lnprop, blob
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               iterations=1, kde=None, update_interval=10, kde_size=None,
-               uniform_transd=False, storechain=True):
+               iterations=1, kde=None, update_interval=None, kde_size=None,
+               uniform_transd=False, storechain=True, **kwargs):
         """
         Advance the ensemble ``iterations`` steps as a generator.
 
@@ -287,24 +269,21 @@ class Sampler(object):
         if p0 is None:
             p = self.draw(self.nwalkers)
         else:
-            if not isinstance(p0, np.ndarray):
-                p = np.array(p0)
-            else:
-                p = p0
+            p = ma.array(p0, copy=True)
 
         if self.pool is None:
             m = map
         else:
             m = self.pool.map
 
-        # Build a proposal if one doesn't already exist
-        self._kde_size = kde_size
-        if self._kde_size is None:
-            self._kde_size = 2*self.nwalkers
+        if kde_size:
+            self._kde_size = kde_size
 
-        if kde is None and self._kde is None:
-            self._kde = self.update_proposal(p, uniform_weight=uniform_transd,
-                                             max_samples=self._kde_size, pool=self.pool)
+        # Build a proposal if one doesn't already exist
+        if kde is not None:
+            self._kde = kde
+        elif self._kde is None:
+            self.update_proposal(p, max_samples=self._kde_size, pool=self.pool, **kwargs)
 
         lnpost = lnpost0
         lnprop = lnprop0
@@ -386,7 +365,7 @@ class Sampler(object):
                     if blob_p is None:
                         blob = None
                     else:
-                        blob = [blob_p[i] if a else blob[i] for i,a in enumerate(acc)]
+                        blob = [blob_p[i] if a else blob[i] for i, a in enumerate(acc)]
 
                 if storechain:
                     # Store stuff
@@ -400,13 +379,11 @@ class Sampler(object):
 
                     self.stored_iterations += 1
 
-                self.iterations += 1
-
                 # Update the proposal at the requested interval
-                if self.iterations % update_interval == 0:
-                    self._kde = self.update_proposal(p, uniform_weight=uniform_transd,
-                                                     pool=self.pool, kde=self._kde,
-                                                     max_samples=self._kde_size)
+                if self.trigger_update(update_interval):
+                    self.update_proposal(p, max_samples=self._kde_size, pool=self.pool, **kwargs)
+
+                self.iterations += 1
 
                 # create generator for sampled points
                 if blob:
@@ -415,7 +392,8 @@ class Sampler(object):
                     yield p, lnpost, lnprop
 
             except KeyboardInterrupt:
-                self.rollback(self.stored_iterations)
+                if storechain:
+                    self.rollback(self.stored_iterations)
                 raise
 
     def draw(self, N):
@@ -423,6 +401,55 @@ class Sampler(object):
         Draw ``N`` samples from the current proposal distribution.
         """
         return self._kde.draw(N)
+
+    def trigger_update(self, interval=None):
+        """
+        Decide whether a proposal update should be triggered, given the requested interval.
+        If `interval` is `None`, no updates will be done.  If it's `auto` binomial tests will
+        be used to look for drift in acceptance rates, which will trigger updates.  If `interval`
+        is an integer, the proposal will be updated every `interval` iterations.
+        """
+        trigger = False
+        if interval is None:
+            trigger = False
+        elif interval == 'auto':
+            trigger = not self.consistent_acceptance_rate()
+        elif isinstance(interval, int):
+            if self.iterations % interval == 0:
+                trigger = True
+        else:
+            raise RuntimeError("Unexpected `interval` in `trigger_update`.")
+
+        return trigger
+
+    def update_proposal(self, p, pool=None, max_samples=None, **kwargs):
+        """
+        Update the proposal density with points `p`.
+
+        :param p:
+            Samples to update the proposal with.
+
+        :param pool: (optional)
+            A pool of processes with `map` function to use.
+
+        :param max_samples: (optional)
+            The maximum number of samples to use for constructing or updating the kde.
+            If a KDE is supplied and adding the samples from `data` will go over this,
+            old samples are thinned by factors of two until under the limit.
+        """
+        self.updates = np.concatenate((self.updates, [self.iterations]))
+
+        # Ignore the uniform-transd arg when fixed-D sampling
+        if "uniform_weight" in kwargs:
+            uniform_weight = kwargs.pop("uniform_weight")
+
+        if self._transd:
+            self._kde = TransdimensionalKDE(p, pool=self.pool, kde=self._kde,
+                                            max_samples=self._kde_size,
+                                            uniform_weight=uniform_weight, **kwargs)
+        else:
+            self._kde = optimized_kde(p, pool=self.pool, kde=self._kde,
+                                      max_samples=self._kde_size, **kwargs)
 
     @property
     def failed_p(self):
@@ -495,6 +522,37 @@ class Sampler(object):
             rates[w] = np.convolve(self.acceptance[:, w], weights, 'valid')
 
         return rates
+
+    def consistent_acceptance_rate(self, window_size=None, critical_pval=1e-6):
+        """
+        Returns `True` if the acceptances of the two halves of the window pass a binomial test,
+        meaning they are consistent with being drawn from a binomial distribution with the same
+        success probability.  This is intended as a convenience funcion for `burnin`.
+        """
+        if window_size is None:
+            if len(self.updates) == 0:
+                return False
+            else:
+                window_start = self.updates[-1]
+        else:
+            window_start = self.iterations - window_size
+        n = self.iterations - window_start
+
+        consistent = True
+        if n > 2:
+            split = n/2
+
+            # Use the first half of the window to define the binomial success rate
+            acc_rate = np.mean(self.acceptance[window_start:window_start+split])
+
+            # Test if the second half of the window is consistent with a binomial distribution
+            #   with success rate `acc_rate`
+            X = self.acceptance[window_start+split:self.iterations].flatten()
+            p_val = binom_test(np.sum(X), len(X), acc_rate)
+            if p_val < critical_pval:
+                consistent = False
+
+        return consistent
 
     def rollback(self, iteration):
         """
