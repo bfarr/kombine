@@ -95,9 +95,9 @@ class Sampler(object):
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                test_steps=16, max_steps=None, **kwargs):
         """
-        Use two-sample K-S tests to determine when burnin is complete.  The
-        interval over which distributions are compared will be adapted based
-        on the average acceptance rate of the walkers.
+        Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done
+        by splitting acceptances in half and running a binomial test.  This isn't guaranteed to
+        return a fully burned-in ensemble, but it will get most of the way there.
 
         :param p0: (optional)
             A list of the initial walker positions.  It should have the
