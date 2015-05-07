@@ -152,9 +152,6 @@ class Sampler(object):
         if max_steps is not None:
             max_iter = start + max_steps
 
-            # If max_steps < update interval, at least run to max_steps
-            test_interval = min(test_interval, max_steps)
-
         step_size = 2
         while step_size <= test_steps:
             # Take one step to estimate acceptance rate
@@ -305,6 +302,8 @@ class Sampler(object):
             blob = [None]*self.nwalkers
 
         # Prepare arrays for storage ahead of time
+        self._acceptance = np.concatenate((self._acceptance,
+                                           np.zeros((iterations, self.nwalkers))))
         if storechain:
             # Make sure to mask things if the stored chain has a mask
             if hasattr(self._chain, "mask"):
@@ -316,8 +315,6 @@ class Sampler(object):
 
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
-            self._acceptance = np.concatenate((self._acceptance,
-                                               np.zeros((iterations, self.nwalkers))))
 
         for i in xrange(int(iterations)):
             try:
@@ -367,12 +364,12 @@ class Sampler(object):
                     else:
                         blob = [blob_p[i] if a else blob[i] for i, a in enumerate(acc)]
 
+                self._acceptance[self.iterations, :] = acc
                 if storechain:
                     # Store stuff
                     self._chain[self.stored_iterations, :, :] = p
                     self._lnpost[self.stored_iterations, :] = lnpost
                     self._lnprop[self.stored_iterations, :] = lnprop
-                    self._acceptance[self.stored_iterations, :] = acc
 
                     if blob:
                         self._blobs.append(blob)
@@ -440,6 +437,7 @@ class Sampler(object):
         self.updates = np.concatenate((self.updates, [self.iterations]))
 
         # Ignore the uniform-transd arg when fixed-D sampling
+        uniform_weight = None
         if "uniform_weight" in kwargs:
             uniform_weight = kwargs.pop("uniform_weight")
 
