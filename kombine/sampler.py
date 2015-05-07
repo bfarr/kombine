@@ -143,7 +143,7 @@ class Sampler(object):
 
         """
         if p0 is not None:
-            p0 = ma.atleast_2d(p0)
+            p0 = np.atleast_2d(p0)
 
         # Determine the maximum iteration to look for
         start = self.iterations
@@ -266,7 +266,13 @@ class Sampler(object):
         if p0 is None:
             p = self.draw(self.nwalkers)
         else:
-            p = ma.array(p0, copy=True)
+            try:
+                # Try copying to preserve array type (i.e.masked or not)
+                p = p0.copy()
+            except AttributeError:
+                # If not already an array, make it a non-masked array by default.
+                #   Operations with masked arrays can be slow.
+                p = np.array(p0, copy=True)
 
         if self.pool is None:
             m = map
