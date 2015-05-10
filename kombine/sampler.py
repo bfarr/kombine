@@ -154,6 +154,10 @@ class Sampler(object):
 
         step_size = 2
         while step_size <= test_steps:
+            # Update the proposal
+            self.update_proposal(p0, uniform_weight=True,
+                                 pool=self.pool, max_samples=self.nwalkers)
+
             # Take one step to estimate acceptance rate
             test_interval = 1
             results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
@@ -184,9 +188,6 @@ class Sampler(object):
 
             if self.consistent_acceptance_rate():
                 step_size *= 2
-
-            self.update_proposal(p, uniform_weight=True,
-                                 pool=self.pool, max_samples=self.nwalkers)
 
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
 
