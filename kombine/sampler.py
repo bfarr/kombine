@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.ma as ma
-from scipy.stats import binom_test
+from scipy.stats import fisher_exact
 
 from .interruptible_pool import Pool
 from .clustered_kde import optimized_kde, TransdimensionalKDE
@@ -96,7 +96,7 @@ class Sampler(object):
                test_steps=16, max_steps=None, **kwargs):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done
-        by splitting acceptances in half and running a binomial test.  This isn't guaranteed to
+        by splitting acceptances in half and checking for consistency.  This isn't guaranteed to
         return a fully burned-in ensemble, but it will get most of the way there.
 
         :param p0: (optional)
@@ -409,9 +409,9 @@ class Sampler(object):
     def trigger_update(self, interval=None):
         """
         Decide whether a proposal update should be triggered, given the requested interval.
-        If `interval` is `None`, no updates will be done.  If it's `auto` binomial tests will
-        be used to look for drift in acceptance rates, which will trigger updates.  If `interval`
-        is an integer, the proposal will be updated every `interval` iterations.
+        If `interval` is `None`, no updates will be done.  If it's `auto` acceptances are split
+        in half and checked for consistency.  If `interval` is an integer, the proposal will be
+        updated every `interval` iterations.
         """
         trigger = False
         if interval is None:
@@ -528,11 +528,11 @@ class Sampler(object):
 
         return rates
 
-    def consistent_acceptance_rate(self, window_size=None, critical_pval=1e-6):
+    def consistent_acceptance_rate(self, window_size=None, critical_pval=0.05):
         """
-        Returns `True` if the acceptances of the two halves of the window pass a binomial test,
-        meaning they are consistent with being drawn from a binomial distribution with the same
-        success probability.  This is intended as a convenience funcion for `burnin`.
+        Returns `True` if the acceptances of the two halves of the window are consistent with
+        having the same acceptance rates.  This is done using Fisher's exact test.  This is
+        intended as a convenience funcion for `burnin`.
         """
         if window_size is None:
             if len(self.updates) == 0:
@@ -541,19 +541,22 @@ class Sampler(object):
                 window_start = self.updates[-1]
         else:
             window_start = self.iterations - window_size
-        n = self.iterations - window_start
 
+        window_length = self.iterations - window_start
+
+        # If window is really small, return `consistent` to avoid gratuitous updating
         consistent = True
-        if n > 2:
-            split = n/2
+        if window_length > 2:
+            windowed_acceptances = self.acceptance[window_start:self.iterations].flatten()
+            X1, X2 = np.array_split(windowed_acceptances, 2)
 
-            # Use the first half of the window to define the binomial success rate
-            acc_rate = np.mean(self.acceptance[window_start:window_start+split])
+            n1, n2 = len(X1), len(X2)
+            k1, k2 = np.sum(X1), np.sum(X2)
 
-            # Test if the second half of the window is consistent with a binomial distribution
-            #   with success rate `acc_rate`
-            X = self.acceptance[window_start+split:self.iterations].flatten()
-            p_val = binom_test(np.sum(X), len(X), acc_rate)
+            # Use Fisher's exact test to test whether the halves have consistent acceptances
+            table = [[k1, k2], [n1, n2]]
+            p_val = fisher_exact(table)[1]
+
             if p_val < critical_pval:
                 consistent = False
 
