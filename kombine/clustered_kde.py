@@ -105,10 +105,12 @@ class ClusteredKDE(object):
 
         self._mean = np.mean(data, axis=0)
         self._std = np.std(data, axis=0)
-        self._data = self._whiten(data)
+        self._data = data
 
-        self._centroids, _ = kmeans(self._data, k)
-        self._assignments, _ = vq(self._data, self._centroids)
+        # Cluster data that's mean 0 and scaled to unit width in each parameter independently
+        white_data = self._whiten(data)
+        self._centroids, _ = kmeans(white_data, k)
+        self._assignments, _ = vq(white_data, self._centroids)
 
         self._kdes = [KDE(self._data[self._assignments == c]) for c in range(k)]
         self._logweights = np.log([np.sum(self._assignments == c)/float(self._N) for c in range(k)])
@@ -123,18 +125,15 @@ class ClusteredKDE(object):
             sel = clusters == c
             draws[sel] = self._kdes[c].draw(np.sum(sel))
 
-        return self._color(draws)
+        return draws
 
-    def _whitened_logpdf(self, X, pool=None):
+    def logpdf(self, X, pool=None):
         logpdfs = [logweight + kde(X, pool=pool)
                    for logweight, kde in zip(self._logweights, self._kdes)]
         if len(X.shape) == 1:
             return logsumexp(logpdfs)
         else:
             return logsumexp(logpdfs, axis=0)
-
-    def logpdf(self, X, pool=None):
-        return self._whitened_logpdf(self._whiten(X), pool=pool)
 
     def _whiten(self, data):
         return (data - self._mean)/self._std
@@ -143,7 +142,7 @@ class ClusteredKDE(object):
         return data * self._std + self._mean
 
     def bic(self, pool=None):
-        log_l = np.sum(self._whitened_logpdf(self._data, pool=pool))
+        log_l = np.sum(self.logpdf(self._data, pool=pool))
 
         # Determine the total number of parameters in clustered-KDE
         # Account for centroid locations
