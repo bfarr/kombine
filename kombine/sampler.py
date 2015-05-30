@@ -554,7 +554,7 @@ class Sampler(object):
             k1, k2 = np.sum(X1), np.sum(X2)
 
             # Use Fisher's exact test to test whether the halves have consistent acceptances
-            table = [[k1, k2], [n1, n2]]
+            table = [[k1, k2], [n1 - k1, n2 - k2]]
             p_val = fisher_exact(table)[1]
 
             if p_val < critical_pval:
