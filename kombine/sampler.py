@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.ma as ma
-from scipy.stats import fisher_exact
+from scipy.stats import chi2_contingency
 
 from .interruptible_pool import Pool
 from .clustered_kde import optimized_kde, TransdimensionalKDE
@@ -530,9 +530,9 @@ class Sampler(object):
 
     def consistent_acceptance_rate(self, window_size=None, critical_pval=0.05):
         """
-        Returns `True` if the acceptances of the two halves of the window are consistent with
-        having the same acceptance rates.  This is done using Fisher's exact test.  This is
-        intended as a convenience funcion for `burnin`.
+        A convenience funcion for `burnin`.  Returns `True` if the acceptances of the two halves
+        of the window are consistent with having the same acceptance rates.  This is done using
+        a chi-squared contingency test.
         """
         if window_size is None:
             if len(self.updates) == 0:
@@ -553,9 +553,9 @@ class Sampler(object):
             n1, n2 = len(X1), len(X2)
             k1, k2 = np.sum(X1), np.sum(X2)
 
-            # Use Fisher's exact test to test whether the halves have consistent acceptances
+            # Use chi^2 contingency test to test whether the halves have consistent acceptances
             table = [[k1, k2], [n1 - k1, n2 - k2]]
-            p_val = fisher_exact(table)[1]
+            p_val = chi2_contingency(table)[1]
 
             if p_val < critical_pval:
                 consistent = False
