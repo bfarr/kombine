@@ -148,6 +148,11 @@ class Sampler(object):
         # Determine the maximum iteration to look for
         start = self.iterations
 
+        # Confine walkers to their space during burnin
+        freeze_transd = False
+        if self._transd:
+            freeze_transd = True
+
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
@@ -159,8 +164,8 @@ class Sampler(object):
 
             # Take one step to estimate acceptance rate
             test_interval = 1
-            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0, freeze_transd=True,
-                                    **kwargs)
+            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
+                                    freeze_transd=freeze_transd, **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
@@ -177,8 +182,8 @@ class Sampler(object):
             # Use the ACT to set the new test interval, but avoid overstepping a specified max
             test_interval = min(int(step_size*act), max_iter - self.iterations)
 
-            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob, freeze_transd=True,
-                                    **kwargs)
+            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
+                                    freeze_transd=freeze_transd, **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
