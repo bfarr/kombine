@@ -155,12 +155,12 @@ class Sampler(object):
         step_size = 2
         while step_size <= test_steps:
             # Update the proposal
-            self.update_proposal(p0, uniform_weight=True,
-                                 pool=self.pool, max_samples=self.nwalkers)
+            self.update_proposal(p0, pool=self.pool, max_samples=self.nwalkers)
 
             # Take one step to estimate acceptance rate
             test_interval = 1
-            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0, **kwargs)
+            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0, freeze_transd=True,
+                                    **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
@@ -177,11 +177,8 @@ class Sampler(object):
             # Use the ACT to set the new test interval, but avoid overstepping a specified max
             test_interval = min(int(step_size*act), max_iter - self.iterations)
 
-            # Give up if we're about to exceed the maximum number of iterations
-            if self.iterations + test_interval > max_iter:
-                break
-
-            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob, **kwargs)
+            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob, freeze_transd=True,
+                                    **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
@@ -205,7 +202,7 @@ class Sampler(object):
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                iterations=1, kde=None, update_interval=None, kde_size=None,
-               uniform_transd=False, storechain=True, **kwargs):
+               freeze_transd=False, storechain=True, **kwargs):
         """
         Advance the ensemble ``iterations`` steps as a generator.
 
@@ -247,10 +244,9 @@ class Sampler(object):
             room for ``nwalkers`` new samples.  The default is 2*``nwalkers``,
             and must be greater than ``nwalkers`` if specified.
 
-        :param uniform_trans: (optional)
-            If `True` when transdimensional sampling, weight is assigned uniformly
-            across parameter spaces in the proposal distribution.  This helps to
-            avoid races for burnin of each parameter space.
+        :param freeze_transd: (optional)
+            If `True` when transdimensional sampling, walkers are confined to their
+            parameter space.  This helps to avoid races for burnin of each parameter space.
 
         :param storechain: (optional)
             Whether to keep the chain and posterior values in memory or
@@ -332,8 +328,11 @@ class Sampler(object):
 
         for i in xrange(int(iterations)):
             try:
+                spaces = None
+                if freeze_transd:
+                    spaces = ~p.mask
                 # Draw new walker locations from the proposal
-                p_p = self.draw(self.nwalkers)
+                p_p = self.draw(self.nwalkers, spaces=spaces)
 
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
@@ -407,11 +406,17 @@ class Sampler(object):
                     self.rollback(self.stored_iterations)
                 raise
 
-    def draw(self, N):
+    def draw(self, N, spaces=None):
         """
-        Draw ``N`` samples from the current proposal distribution.
+        Draw ``N`` samples from the current proposal distribution. If `spaces` is not `None`
+        while trans-D sampling, draws are confined to the requested spaces.  Such a thing is
+        useful for burnin (e.g. spaces = ~p.mask).
         """
-        return self._kde.draw(N)
+        if self._transd:
+            draws = self._kde.draw(N, spaces=spaces)
+        else:
+            draws = self._kde.draw(N)
+        return draws
 
     def trigger_update(self, interval=None):
         """
@@ -450,15 +455,9 @@ class Sampler(object):
         """
         self.updates = np.concatenate((self.updates, [self.iterations]))
 
-        # Ignore the uniform-transd arg when fixed-D sampling
-        uniform_weight = None
-        if "uniform_weight" in kwargs:
-            uniform_weight = kwargs.pop("uniform_weight")
-
         if self._transd:
             self._kde = TransdimensionalKDE(p, pool=self.pool, kde=self._kde,
-                                            max_samples=self._kde_size,
-                                            uniform_weight=uniform_weight, **kwargs)
+                                            max_samples=self._kde_size, **kwargs)
         else:
             self._kde = optimized_kde(p, pool=self.pool, kde=self._kde,
                                       max_samples=self._kde_size, **kwargs)

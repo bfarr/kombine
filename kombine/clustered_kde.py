@@ -46,7 +46,7 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
     else:
         # Combine data, thinning old data if we need room
         if kde is not None:
-            old_data = kde._color(kde._data)
+            old_data = kde._data
 
             if max_samples is not None:
                 N = len(old_data) + n_new
@@ -292,7 +292,7 @@ class TransdimensionalKDE(object):
         until under the limit in each parameter space.
 
     """
-    def __init__(self, data, uniform_weight=False, kde=None, max_samples=None, pool=None):
+    def __init__(self, data, kde=None, max_samples=None, pool=None):
         N_new, max_dim = data.shape
         self._max_dim = max_dim
 
@@ -306,7 +306,7 @@ class TransdimensionalKDE(object):
         # Construct a separate clustered-KDE for each parameter space
         weights = []
         self._kdes = []
-        for i, space in enumerate(self._spaces):
+        for s, space in enumerate(self._spaces):
             # Construct a selector for the samples from this space
             subspace = np.all(~data.mask == space, axis=1)
 
@@ -322,19 +322,28 @@ class TransdimensionalKDE(object):
 
             old_kde = None
             if kde is not None:
-                old_kde = kde._kdes[i]
+                old_kde = kde._kdes[s]
 
             self._kdes.append(optimized_kde(X, max_samples=max_samples, kde=old_kde, pool=pool))
 
         self._logweights = np.log(np.array(weights))
 
-    def draw(self, N=1):
+    def draw(self, N=1, spaces=None):
         """
         Draw samples from the transdimensional distribution.
         """
-        # Draws spaces randomly with the assigned weights
-        cumulative_weights = np.cumsum(np.exp(self._logweights))
-        space_inds = np.searchsorted(cumulative_weights, np.random.rand(N))
+        if spaces is not None:
+            if len(spaces) != N:
+                raise ValueError('Sample size inconsistent with number of spaces saved')
+            space_inds = np.empty(N)
+            for s, space in enumerate(self._spaces):
+                subspace = np.all(spaces == space, axis=1)
+                space_inds[subspace] = s
+
+        else:
+            # Draws spaces randomly with the assigned weights
+            cumulative_weights = np.cumsum(np.exp(self._logweights))
+            space_inds = np.searchsorted(cumulative_weights, np.random.rand(N))
 
         draws = ma.masked_all((N, self._max_dim))
         for s in xrange(len(self._spaces)):
