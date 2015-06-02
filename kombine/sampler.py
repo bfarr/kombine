@@ -174,8 +174,8 @@ class Sampler(object):
             # Estimate ACT based on acceptance
             act = 2./last_acc_rate - 1
 
-            # Use the ACT to set the new test interval
-            test_interval = int(step_size*act)
+            # Use the ACT to set the new test interval, but avoid overstepping a specified max
+            test_interval = min(int(step_size*act), max_iter - self.iterations)
 
             # Give up if we're about to exceed the maximum number of iterations
             if self.iterations + test_interval > max_iter:
@@ -187,6 +187,11 @@ class Sampler(object):
             except ValueError:
                 p, lnpost, lnprop = results
                 blob = None
+
+            # Quit if we hit the max
+            if self.iterations >= max_iter:
+                print "Burnin hit {} iterations before completing.".format(max_iter)
+                break
 
             if self.consistent_acceptance_rate():
                 step_size *= 2
