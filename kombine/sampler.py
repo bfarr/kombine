@@ -160,8 +160,7 @@ class Sampler(object):
 
             # Take one step to estimate acceptance rate
             test_interval = 1
-            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
-                                    storechain=True, **kwargs)
+            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0, **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
@@ -178,8 +177,7 @@ class Sampler(object):
             if self.iterations + test_interval > max_iter:
                 break
 
-            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
-                                    storechain=True, **kwargs)
+            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob, **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
