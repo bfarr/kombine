@@ -168,10 +168,14 @@ class Sampler(object):
                 blob = None
 
             # Use the fraction of acceptances in the last step to estimate acceptance rate
-            last_acc_rate = np.mean(self.acceptance[-1])
+            #   Bottom out at 1% if acceptances are really bad
+            last_acc_rate = np.max(np.mean(self.acceptance[-1]), 0.01)
 
-            # Use the estimated acceptance rate to set the new test interval
-            test_interval = int(step_size*1./last_acc_rate)
+            # Estimate ACT based on acceptance
+            act = 2./last_acc_rate - 1
+
+            # Use the ACT to set the new test interval
+            test_interval = int(step_size*act)
 
             # Give up if we're about to exceed the maximum number of iterations
             if self.iterations + test_interval > max_iter:
