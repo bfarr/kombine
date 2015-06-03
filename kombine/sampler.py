@@ -86,6 +86,9 @@ class Sampler(object):
         else:
             self.pool = pool
 
+        if not hasattr(self.pool, 'map'):
+            raise AttributeError("Pool object must have a map() method.")
+
         self._transd = transd
         if self._transd:
             self._chain = ma.masked_all((0, self.nwalkers, self.dim))
