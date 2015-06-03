@@ -77,7 +77,7 @@ class Sampler(object):
 
         # operate in serial (1 process)
         if pool is None:
-            pool = SerialPool()
+            self.pool = SerialPool()
 
         # create a multiprocessing pool
         elif self.processes != 1 and self.pool is None:
