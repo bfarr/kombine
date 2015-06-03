@@ -51,14 +51,13 @@ pool = MPIPool()
 if not pool.is_master():
     pool.wait()
     sys.exit(0)
-pool = None
 
 nwalkers = 500
 sampler = kombine.Sampler(nwalkers, ndim, model.lnposterior)
 
 p0 = np.random.uniform(-10, 10, size=(nwalkers, ndim))
 p, post, q = sampler.burnin(p0)
-p, post, q = sampler.run_mcmc(1000)
+p, post, q = sampler.run_mcmc(100)
 
 # close the MPI poll
 pool.close()
