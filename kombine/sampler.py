@@ -4,7 +4,7 @@ from scipy.stats import chi2_contingency
 
 from .interruptible_pool import Pool
 from .clustered_kde import optimized_kde, TransdimensionalKDE
-
+from .serialpool import SerialPool
 
 class GetLnProbWrapper(object):
     def __init__(self, lnpost, kde):
@@ -73,10 +73,21 @@ class Sampler(object):
         self.iterations = 0
         self.stored_iterations = 0
 
-        self.pool = pool
         self.processes = processes
-        if self.processes != 1 and self.pool is None:
+
+        # operate in serial (1 process)
+        if pool is None:
+            pool = SerialPool()
+
+        # create a multiprocessing pool
+        elif self.processes != 1 and self.pool is None:
             self.pool = Pool(self.processes)
+
+        else:
+            self.pool = pool
+
+        if not hasattr(self.pool, 'map'):
+            raise AttributeError("Pool object must have a map() method.")
 
         self._transd = transd
         if self._transd:
@@ -283,10 +294,7 @@ class Sampler(object):
                 #   Operations with masked arrays can be slow.
                 p = np.array(p0, copy=True)
 
-        if self.pool is None:
-            m = map
-        else:
-            m = self.pool.map
+        m = self.pool.map
 
         if kde_size:
             self._kde_size = kde_size
@@ -625,10 +633,8 @@ class Sampler(object):
         returned.  Usually you'll get:
         ``p``, ``lnpost``, ``lnprop``, ``blob``(optional)
         """
-        if self.pool is None:
-            m = map
-        else:
-            m = self.pool.map
+
+        m = self.pool.map
 
         if p0 is None:
             if self._last_run_mcmc_result is None:
