@@ -23,9 +23,9 @@ from scipy.stats import multivariate_normal
 try:
     from mpipool import MPIPool
 except ImportError:
-    raise ImportError("mpipool (https://github.com/dfm/mpipool/) is required "
-                      "for this example, along with a working installation of "
-                      "openMPI.")
+    raise ImportError("Both mpipool (https://github.com/dfm/mpipool/) and mpi4py "
+                      "are required for MPI support and this example, along with "
+                      "a working installation of openMPI.")
 
 class Model(object):
     def __init__(self, mean, cov):
