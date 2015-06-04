@@ -80,7 +80,7 @@ class Sampler(object):
             self.pool = SerialPool()
 
         # create a multiprocessing pool
-        elif self.processes != 1 and self.pool is None:
+        elif self.processes != 1 and pool is None:
             self.pool = Pool(self.processes)
 
         else:

@@ -23,9 +23,9 @@ from scipy.stats import multivariate_normal
 try:
     from mpipool import MPIPool
 except ImportError:
-    raise ImportError("mpipool (https://github.com/dfm/mpipool/) is required "
-                      "for this example, along with a working installation of "
-                      "openMPI.")
+    raise ImportError("Both mpipool (https://github.com/dfm/mpipool/) and mpi4py "
+                      "are required for MPI support and this example, along with "
+                      "a working installation of openMPI.")
 
 class Model(object):
     def __init__(self, mean, cov):
@@ -35,6 +35,9 @@ class Model(object):
 
     def lnposterior(self, x):
         return multivariate_normal.logpdf(x, mean=self.mean, cov=self.cov)
+
+    def __call__(self, x):
+        return self.lnposterior(x)
 
 ndim = 3
 A = np.random.rand(ndim, ndim)
@@ -53,7 +56,7 @@ if not pool.is_master():
     sys.exit(0)
 
 nwalkers = 500
-sampler = kombine.Sampler(nwalkers, ndim, model.lnposterior)
+sampler = kombine.Sampler(nwalkers, ndim, model, pool=pool)
 
 p0 = np.random.uniform(-10, 10, size=(nwalkers, ndim))
 p, post, q = sampler.burnin(p0)
