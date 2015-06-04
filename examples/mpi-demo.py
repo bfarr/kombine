@@ -36,6 +36,9 @@ class Model(object):
     def lnposterior(self, x):
         return multivariate_normal.logpdf(x, mean=self.mean, cov=self.cov)
 
+    def __call__(self, x):
+        return self.lnposterior(x)
+
 ndim = 3
 A = np.random.rand(ndim, ndim)
 mean = np.zeros(ndim)
