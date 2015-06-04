@@ -56,7 +56,7 @@ if not pool.is_master():
     sys.exit(0)
 
 nwalkers = 500
-sampler = kombine.Sampler(nwalkers, ndim, model.lnposterior, pool=pool)
+sampler = kombine.Sampler(nwalkers, ndim, model, pool=pool)
 
 p0 = np.random.uniform(-10, 10, size=(nwalkers, ndim))
 p, post, q = sampler.burnin(p0)
