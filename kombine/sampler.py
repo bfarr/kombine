@@ -7,12 +7,14 @@ from .clustered_kde import optimized_kde, TransdimensionalKDE
 from .serialpool import SerialPool
 
 class GetLnProbWrapper(object):
-    def __init__(self, lnpost, kde):
+
+    def __init__(self, lnpost, kde, *args):
         self.lnpost = lnpost
         self.kde = kde
+        self.args = args
 
     def __call__(self, p):
-        result = self.lnpost(p)
+        result = self.lnpost(p, *self.args)
         kde = self.kde(p)
 
         # allow posterior function to optionally
@@ -61,7 +63,7 @@ class Sampler(object):
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
-                 processes=None, pool=None):
+                 processes=None, pool=None, args=[]):
         self.nwalkers = nwalkers
         self.dim = ndim
         self._kde = None
@@ -69,6 +71,7 @@ class Sampler(object):
         self.updates = np.array([])
 
         self._get_lnpost = lnpostfn
+        self._lnpost_args = args
 
         self.iterations = 0
         self.stored_iterations = 0
@@ -310,7 +313,7 @@ class Sampler(object):
         blob = blob0
 
         if lnpost is None or lnprop is None:
-            results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde), p))
+            results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p))
             lnpost = np.array([r[0] for r in results]) if lnpost is None else lnpost
             lnprop = np.array([r[1] for r in results]) if lnprop is None else lnprop
 
@@ -350,7 +353,7 @@ class Sampler(object):
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
                 try:
-                    results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde), p_p))
+                    results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p_p))
 
                     lnpost_p = np.array([r[0] for r in results])
                     lnprop_p = np.array([r[1] for r in results])
@@ -655,7 +658,7 @@ class Sampler(object):
 
         if self._kde is not None:
             if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
-                results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde), p0))
+                results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p0))
 
                 if lnpost0 is None:
                     lnpost0 = np.array([r[0] for r in results])
