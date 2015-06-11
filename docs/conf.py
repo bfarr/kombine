@@ -36,6 +36,8 @@ extensions = [
     'sphinx.ext.viewcode',
 ]
 
+#extensions += ['sphinxjp.themes.basicstrap']
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -120,13 +122,20 @@ todo_include_todos = False
 # a list of builtin themes.
 html_theme = 'alabaster'
 html_theme_options = {
+    'logo': 'kombine.png',
     'github_user': 'bfarr',
-    'head_font_family': 'megrim'
+    'head_font_family': "'Oswald', sans-serif",
+    'font_family': 'Dosis',
 }
 
-# Load up some google fonts
-html_theme_options = {
-}
+#html_theme = 'basicstrap'
+#html_theme_options = {
+#    'header_inverse': True,
+#    'relbar_inverse': True,
+#    'googlewebfont': True,
+#    'googlewebfont_url': 'http://fonts.googleapis.com/css?family=Dosis|Oswald:400,700|Roboto+Condensed|Share+Tech+Mono|Megrim',
+#    'googlewebfont_style': "font-family: 'Megrim', cursive",
+#}
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -145,7 +154,7 @@ html_theme_options = {
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-#html_logo = None
+html_logo = "../_static/kombine.png"
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
