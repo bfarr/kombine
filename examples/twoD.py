@@ -71,7 +71,7 @@ class Posterior(object):
     def __call__(self, X):
         return self.lnpost(X)
 
-lnprob = Posterior('../img/kombine.png')
+lnprob = Posterior('../docs/_static/kombine.png')
 
 # Initially distribute the ensemble across the prior
 nwalkers = 1000
