@@ -126,6 +126,9 @@ html_theme_options = {
     'github_user': 'bfarr',
     'head_font_family': "'Oswald', sans-serif",
     'font_family': 'Dosis',
+    'github_user': 'bfarr',
+    'github_repo': 'kobine',
+    'github_banner': 'true'
 }
 
 #html_theme = 'basicstrap'
