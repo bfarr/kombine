@@ -46,7 +46,16 @@ User Guide
     installation
     tutorial
 
+API Documentation
+-----------------
+
+ * :ref:`genindex`
+ * :ref:`modindex`
+ * :ref:`search`
+
 Contributors
 ------------
 
 .. include:: ../AUTHORS.rst
+
+
