@@ -1,19 +1,34 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+A kernel-density-based, embarrassingly parallel ensemble sampler.
+"""
+
 import numpy as np
 import numpy.ma as ma
+
 from scipy.stats import chi2_contingency
 
 from .interruptible_pool import Pool
-from .clustered_kde import optimized_kde, TransdimensionalKDE
 from .serialpool import SerialPool
+from .clustered_kde import optimized_kde, TransdimensionalKDE
 
-class GetLnProbWrapper(object):
-
+class _GetLnProbWrapper(object):
+    """Convenience class for evaluating multiple probability densities at a single point."""
     def __init__(self, lnpost, kde, *args):
         self.lnpost = lnpost
         self.kde = kde
         self.args = args
 
-    def __call__(self, p):
+    def lnprobs(self, p):
+        """
+        Evaluate the log probability density of the stored target distribution fuction and KDE at
+        `p`.
+
+        :param p: Location to evaluate probability densties at.
+
+        :returns: ``lnpost(p)``, ``kde(p)``
+        """
         result = self.lnpost(p, *self.args)
         kde = self.kde(p)
 
@@ -27,39 +42,39 @@ class GetLnProbWrapper(object):
             lnpost = result
             return lnpost, kde
 
+    __call__ = lnprobs
 
 class Sampler(object):
     """
     An Ensemble sampler.
 
-    The :attr:`chain` member of this object has the shape:
-    ``(nsteps, nwalkers, dim)`` where ``nsteps`` is the number of steps
+    The :attr:`chain` member of this object has the shape: `(nsteps, nwalkers, ndim)` where `nsteps`
+    is the stored number of steps taken thus far.
 
     :param nwalkers:
         The number of individual MCMC chains to include in the ensemble.
 
     :param ndim:
-        Number of dimensions in the parameter space.  If ``transd`` is ``True``
-        this is the number of unique dimensions across the parameter spaces.
+        Number of dimensions in the parameter space.  If `transd` is ``True`` this is the number of
+        unique dimensions across the parameter spaces.
 
     :param lnpostfn:
-        A function that takes a vector in the parameter space as input and
-        returns the natural logarithm of the posterior probability for that
-        position.
+        A function that takes a vector in the parameter space as input and returns the natural
+        logarithm of the posterior probability for that position.
 
     :param transd:
-        If ``True``, the sampler will operate across parameter spaces using
-        a ``TransdimensionalKDE`` proposal distribution. In this mode a masked
-        array with samples in each of the possible sets of dimensions must
-        be given for the initial ensemble distribution.
+        If ``True``, the sampler will operate across parameter spaces using a
+        :class:`.clustered_kde.TransdimensionalKDE` proposal distribution. In this mode a masked
+        array with samples in each of the possible sets of dimensions must be given for the initial
+        ensemble distribution.
 
     :param processes: (optional)
-        The number of processes to use with `multiprocessing`.  By default,
-        all available cores will be used.
+        The number of processes to use with :mod:`multiprocessing`.  If ``None``, all available
+        cores are used.
 
     :param pool: (optional)
-        A pre-constructed pool with a map method. If `None` a pool will be created
-        using multiprocessing.
+        A pre-constructed pool with a map method. If ``None`` a pool will be created using
+        :mod:`multiprocessing`.
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
@@ -79,11 +94,11 @@ class Sampler(object):
         self.processes = processes
 
         # operate in serial (1 process)
-        if pool is None:
+        if self.processes == 1 and pool is None:
             self.pool = SerialPool()
 
         # create a multiprocessing pool
-        elif self.processes != 1 and pool is None:
+        elif pool is None:
             self.pool = Pool(self.processes)
 
         else:
@@ -109,52 +124,49 @@ class Sampler(object):
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                test_steps=16, max_steps=None, **kwargs):
         """
-        Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done
-        by splitting acceptances in half and checking for consistency.  This isn't guaranteed to
-        return a fully burned-in ensemble, but it will get most of the way there.
+        Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
+        splitting acceptances in half and checking for statistical consistency.  This isn't
+        guaranteed to return a fully burned-in ensemble, but usually does.
 
         :param p0: (optional)
-            A list of the initial walker positions.  It should have the
-            shape ``(nwalkers, dim)``.  If ``None`` and the sampler has been
-            run previously, it'll pick up where it left off.
+            A list of the initial walker positions.  It should have the shape `(nwalkers, ndim)`.
+            If ``None`` and the sampler has been run previously, it'll pick up where it left off.
 
         :param lnpost0: (optional)
-            The list of log posterior probabilities for the walkers at
-            positions ``p0``. If ``lnpost0 is None``, the initial
-            values are calculated. It should have the shape
-            ``(nwalkers, dim)``.
+            The list of log posterior probabilities for the walkers at positions `p0`. If ``lnpost0
+            is None``, the initial values are calculated. It should have the shape `(nwalkers,
+            ndim)`.
 
         :param lnprop0: (optional)
-            The list of log proposal densities for the walkers at
-            positions ``p0``. If ``lnprop0 is None``, the initial
-            values are calculated. It should have the shape
-            ``(nwalkers, dim)``.
+            List of log proposal densities for walkers at positions `p0`. If ``lnprop0 is None``,
+            the initial values are calculated. It should have the shape `(nwalkers, ndim)`.
 
         :param blob0: (optional)
-            The list of blob data for walkers at positions ``p0``.
+            The list of blob data for walkers at positions `p0`.
 
         :param test_steps: (optional)
-            The (rough) number of accepted steps over which to check for acceptance
-            rate consistency. If you find burnin repeatedly ending prematurely try increasing this.
+            The (rough) number of accepted steps over which to check for acceptance rate
+            consistency. If you find burnin repeatedly ending prematurely try increasing this.
 
         :param max_steps: (optional)
-            An absolute maximum number of steps to take, in case burnin
-            is too painful.
+            An absolute maximum number of steps to take, in case burnin is too painful.
 
-        After burning in, this method returns:
+        :param kwargs: (optional)
+            The rest is passed to :meth:`run_mcmc`.
 
-        * ``p`` - A list of the current walker positions, the shape of which
-            will be ``(nwalkers, dim)``.
+        After burnin...
 
-        * ``lnpost`` - The list of log posterior probabilities for the
-          walkers at positions ``p``, with shape ``(nwalkers, dim)``.
+        :returns:
+            * ``p`` - A list of the current walker positions with shape `(nwalkers, ndim)`.
 
-        * ``lnprop`` - The list of log proposal densities for the
-          walkers at positions ``p``, with shape ``(nwalkers, dim)``.
+            * ``lnpost`` - Array of log posterior probabilities for walkers at positions `p`; has
+              shape `(nwalkers, ndim)`.
 
-        * ``blob`` - The list of blob data for walkers at position ``p``,
-          with shape ``(nwalkers,)`` if returned by ``lnpostfn`` else None
+            * ``lnprop`` - Array of log proposal densities for walkers at positions `p`; has shape
+              `(nwalkers, ndim)`.
 
+            * ``blob`` - (if `lnprobfn` returns blobs) The list of blob data for the walkers at
+              positions `p`.
         """
         if p0 is not None:
             p0 = np.atleast_2d(p0)
@@ -223,68 +235,64 @@ class Sampler(object):
                iterations=1, kde=None, update_interval=None, kde_size=None,
                freeze_transd=False, storechain=True, **kwargs):
         """
-        Advance the ensemble ``iterations`` steps as a generator.
+        Advance the ensemble `iterations` steps as a generator.
 
-        :param p0 (optional):
-            A list of the initial walker positions of shape
-            ``(nwalkers, dim)``.  If ``None`` and a proposal distribution
-            exists, walker positions will be drawn from the proposal.
+        :param p0: (optional)
+            A list of the initial walker positions.  It should have the shape `(nwalkers, ndim)`.
+            If ``None`` and a proposal distribution exists, walker positions will be drawn from the
+            proposal.
 
         :param lnpost0: (optional)
-            The list of log posterior probabilities for the walkers at
-            positions ``p0``. If ``lnpost0 is None``, the initial
-            values are calculated. It should have the shape
-            ``(nwalkers, dim)``.
+            The list of log posterior probabilities for the walkers at positions `p0`. If ``lnpost0
+            is None``, the initial values are calculated. It should have the shape `(nwalkers,
+            ndim)`.
 
         :param lnprop0: (optional)
-            The list of log proposal densities for the walkers at
-            positions ``p0``. If ``lnprop0 is None``, the initial
-            values are calculated. It should have the shape
-            ``(nwalkers, dim)``.
+            List of log proposal densities for walkers at positions `p0`. If ``lnprop0 is None``,
+            the initial values are calculated. It should have the shape `(nwalkers, ndim)`.
 
         :param blob0: (optional)
-            The list of blob data for the walkers at positions ``p0``.
-            If ``blob0 is None`` but ``lnpost0`` and ``lnprop0`` are
-            given, the likelihood function is assumed not
-            to return blob data and it is not recomputed.
+            The list of blob data for walkers at positions `p0`.
 
         :param iterations: (optional)
             The number of steps to run.
 
         :param kde: (optional)
-            An already-constucted KDE with `__call__` and `draw` methods.
+            An already-constucted, evaluatable KDE with a ``draw`` method.
 
         :param update_interval: (optional)
-            The number of steps between proposal updates.
+            Number of steps between proposal updates.
 
         :param kde_size: (optional)
-            Maximum sample size for KDE construction.  When the KDE is updated,
-            existing samples are thinned by factors of two until there's enough
-            room for ``nwalkers`` new samples.  The default is 2*``nwalkers``,
-            and must be greater than ``nwalkers`` if specified.
+            Maximum sample size for KDE construction.  When the KDE is updated, existing samples are
+            thinned by factors of two until there's enough room for `nwalkers` new samples.  The
+            default is `nwalkers`, and must be greater than :math:`\geq``nwalkers` if specified.
 
         :param freeze_transd: (optional)
-            If `True` when transdimensional sampling, walkers are confined to their
-            parameter space.  This helps to avoid races for burnin of each parameter space.
+            If ``True`` when transdimensional sampling, walkers are confined to their parameter
+            space.  This is helpful during burnin, and allows fox fixed-D burnin before
+            transdimensional sampling.
 
         :param storechain: (optional)
-            Whether to keep the chain and posterior values in memory or
-            return them step-by-step as a generator
+            Flag for disabling chain and probability density storage in :attr:`chain`,
+            :attr:`lnpost`, and :attr:`lnprop`.
 
-        After ``iteration`` steps, this method returns (if storechain=True):
+        :param kwargs: (optional)
+            The rest is passed to :meth:`update_proposal`.
 
-        * ``p`` - A list of the current walker positions, the shape of which
-            will be ``(nwalkers, dim)``.
+        After each iteration...
 
-        * ``lnpost`` - The list of log posterior probabilities for the
-          walkers at positions ``p``, with shape ``(nwalkers, dim)``.
+        :yields:
+            * ``p`` - An array of current walker positions with shape `(nwalkers, ndim)`.
 
-        * ``lnprop`` - The list of log proposal densities for the
-          walkers at positions ``p``, with shape ``(nwalkers, dim)``.
+            * ``lnpost`` - The list of log posterior probabilities for the walkers at positions
+              ``p``, with shape `(nwalkers, ndim)`.
 
-        * ``blob`` - The list of blob data for the walkers at positions ``p``
-          if provided by `lnpostfn`` else None
+            * ``lnprop`` - The list of log proposal densities for the walkers at positions `p`, with
+              shape `(nwalkers, ndim)`.
 
+            * ``blob`` - (if `lnprobfn` returns blobs) The list of blob data for the walkers at
+              positions `p`.
         """
         if p0 is None:
             p = self.draw(self.nwalkers)
@@ -313,7 +321,7 @@ class Sampler(object):
         blob = blob0
 
         if lnpost is None or lnprop is None:
-            results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p))
+            results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p))
             lnpost = np.array([r[0] for r in results]) if lnpost is None else lnpost
             lnprop = np.array([r[1] for r in results]) if lnprop is None else lnprop
 
@@ -353,7 +361,8 @@ class Sampler(object):
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
                 try:
-                    results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p_p))
+                    results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde,
+                                                       *self._lnpost_args), p_p))
 
                     lnpost_p = np.array([r[0] for r in results])
                     lnprop_p = np.array([r[1] for r in results])
@@ -422,24 +431,36 @@ class Sampler(object):
                     self.rollback(self.stored_iterations)
                 raise
 
-    def draw(self, N, spaces=None):
+    def draw(self, size, spaces=None):
         """
-        Draw ``N`` samples from the current proposal distribution. If `spaces` is not `None`
-        while trans-D sampling, draws are confined to the requested spaces.  Such a thing is
-        useful for burnin (e.g. spaces = ~p.mask).
+        Draw `size` samples from the current proposal distribution.
+
+        :param size:
+            Number of samples to draw.
+
+        :param spaces:
+            If not ``None`` while transdimensional sampling, draws are confined to the requested
+            spaces.  Such a thing is useful for burnin (e.g. ``spaces = ~p.mask``).
+
+        :returns: `size` draws from the proposal distribution.
         """
         if self._transd:
-            draws = self._kde.draw(N, spaces=spaces)
+            draws = self._kde.draw(size, spaces=spaces)
         else:
-            draws = self._kde.draw(N)
+            draws = self._kde.draw(size)
         return draws
 
     def trigger_update(self, interval=None):
         """
-        Decide whether a proposal update should be triggered, given the requested interval.
-        If `interval` is `None`, no updates will be done.  If it's `auto` acceptances are split
-        in half and checked for consistency.  If `interval` is an integer, the proposal will be
-        updated every `interval` iterations.
+        Decide whether to trigger a proposal update.
+
+        :param interval:
+            Interval between proposal updates.  If ``None``, no updates will be done.  If
+            ``"auto"``, acceptances are split in half and checked for consistency (see
+            :meth:`consistent_acceptance_rate`).  If an ``int``, the proposal will be updated
+            every `interval` iterations.
+
+        :returns: ``bool`` indicating whether a proposal update is due.
         """
         trigger = False
         if interval is None:
@@ -462,12 +483,15 @@ class Sampler(object):
             Samples to update the proposal with.
 
         :param pool: (optional)
-            A pool of processes with `map` function to use.
+            A pool of processes with ``map`` function to use.
 
         :param max_samples: (optional)
-            The maximum number of samples to use for constructing or updating the kde.
-            If a KDE is supplied and adding the samples from `data` will go over this,
-            old samples are thinned by factors of two until under the limit.
+            The maximum number of samples to use for constructing or updating the kde.  If a KDE is
+            supplied and adding the samples from it will go over this, old samples are thinned by
+            factors of two until under the limit.
+
+        :param kwargs: (optional)
+            The rest is passed to the KDE constructor.
         """
         self.updates = np.concatenate((self.updates, [self.iterations]))
 
@@ -488,53 +512,62 @@ class Sampler(object):
     @property
     def chain(self):
         """
-        Ensemble's past samples,
-            with shape ``(iterations, nwalkers, ndim)``.
+        Ensemble's past samples, with shape `(iterations, nwalkers, ndim)`.
         """
         return self._chain
 
     @property
     def blobs(self):
         """
-        Ensemble's past metadata
+        Ensemble's past metadata.
         """
         return self._blobs
 
     @property
     def lnpost(self):
         """
-        Ensemble's past posterior probabilities,
-            with shape ``(iterations, nwalkers)``.
+        Ensemble's past posterior probabilities, with shape `(iterations, nwalkers)`.
         """
         return self._lnpost
 
     @property
     def lnprop(self):
         """
-        Ensemble's past proposal probabilities,
-            with shape ``(iterations, nwalkers)``.
+        Ensemble's past proposal probabilities, with shape `(iterations, nwalkers)`.
         """
         return self._lnprop
 
     @property
     def acceptance(self):
         """
-        Boolean array of ensemble's past acceptances,
-            with shape ``(iterations, nwalkers)``.
+        Boolean array of ensemble's past acceptances, with shape `(iterations, nwalkers)`.
         """
         return self._acceptance
 
     @property
     def acceptance_fraction(self):
         """
-        An array (length: ``iterations``) of the fraction of walkers that
-            accepted each step.
+        A 1-D array of length :attr:`stored_iterations` of the fraction of walkers that accepted
+        each step.
         """
         return np.mean(self.acceptance, axis=1)
 
     @property
-    def acceptance_rate(self, window=None):
+    def acceptance_rate(self):
         """
+        An `(nwalkers, )`-shaped array of the windowed acceptance rate for each walker.  The size of
+        the window is chosen automatically based on the fraction of acceptances in the ensembles
+        last step.  See :meth:`windowed_acceptance_rate` if you want more control.
+        """
+        return windowed_acceptance_rate()
+
+    def windowed_acceptance_rate(self, window=None):
+        """
+        An `(nwalkers, -1)`-shaped array of the windowed acceptance rate for each walker.
+
+        :param window:
+            Number of iterations to calculate acceptance rate over.  If ``None``, the fraction of
+            accepances across the ensemble's last step are used for scale.
         """
         N = len(self.acceptance)
 
@@ -552,9 +585,17 @@ class Sampler(object):
 
     def consistent_acceptance_rate(self, window_size=None, critical_pval=0.05):
         """
-        A convenience funcion for `burnin`.  Returns `True` if the acceptances of the two halves
-        of the window are consistent with having the same acceptance rates.  This is done using
-        a chi-squared contingency test.
+        A convenience function for :meth:`burnin` and :meth:`trigger_update`.  Returns ``True``
+        if the acceptances of the two halves of the window are consistent with having the same
+        acceptance rates.  This is done using a chi-squared contingency test.
+
+        :param window_size:
+            Number of iterations to look back for acceptances.  If ``None``, the iteration of the
+            last proposal update (from :attr:`updates`) is used.
+
+        :param critical_pval:
+            The critial p-value for considering the distributions consistent.  If the calculated
+            p-value is over this, then ``True`` is returned.
         """
         if window_size is None:
             if len(self.updates) == 0:
@@ -586,8 +627,8 @@ class Sampler(object):
 
     def rollback(self, iteration):
         """
-        Shrink arrays down to a length of ``iteration`` and reset the
-        pool if there is one.
+        Shrink internal arrays down to a length of `iteration` and reset the :attr:`pool` if there
+        is one.  This is helpful for keeping things consistent after a :exc:`KeyboardInterrupt`.
         """
         self._chain = self._chain[:iteration]
         self._lnpost = self._lnpost[:iteration]
@@ -602,39 +643,43 @@ class Sampler(object):
 
     def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None, **kwargs):
         """
-        Iterate `sample` for ``N`` iterations and return the result.
+        Iterate :meth:`sample` for `N` iterations and return the result.
+
         :param N:
             The number of steps to take.
 
-        :param p0 (optional):
-            A list of the initial walker positions of shape
-            ``(nwalkers, dim)``.  If ``None`` and a proposal distribution
-            exists, walker positions will be drawn from the proposal.
+        :param p0: (optional)
+            A list of the initial walker positions.  It should have the shape `(nwalkers, ndim)`.
+            If ``None`` and the sampler has been run previously, it'll pick up where it left off.
 
         :param lnpost0: (optional)
-            The list of log posterior probabilities for the walkers at
-            positions ``p0``. If ``lnpost0 is None``, the initial
-            values are calculated. It should have the shape
-            ``(nwalkers, dim)``.
+            The list of log posterior probabilities for the walkers at positions `p0`. If ``lnpost0
+            is None``, the initial values are calculated. It should have the shape `(nwalkers,
+            ndim)`.
 
         :param lnprop0: (optional)
-            The list of log proposal densities for the walkers at
-            positions ``p0``. If ``lnprop0 is None``, the initial
-            values are calculated. It should have the shape
-            ``(nwalkers, dim)``.
+            List of log proposal densities for walkers at positions `p0`. If ``lnprop0 is None``,
+            the initial values are calculated. It should have the shape `(nwalkers, ndim)`.
 
         :param blob0: (optional)
-            The list of blob data for the walkers at positions ``p0``.
-            If ``blob0 is None`` but ``lnpost0`` and ``lnprop0`` are
-            given, the likelihood function is assumed not
-            to return blob data and it is not recomputed.
+            The list of blob data for walkers at positions `p0`.
 
         :param kwargs: (optional)
-            The rest is passed to the `sample` method.
+            The rest is passed to :meth:`sample`.
 
-        Results of the final sample in the form that `sample` yields are
-        returned.  Usually you'll get:
-        ``p``, ``lnpost``, ``lnprop``, ``blob``(optional)
+        After `N` steps...
+
+        :returns:
+            * ``p`` - An array of current walker positions with shape `(nwalkers, ndim)`.
+
+            * ``lnpost`` - The list of log posterior probabilities for the walkers at positions
+              ``p``, with shape `(nwalkers, ndim)`.
+
+            * ``lnprop`` - The list of log proposal densities for the walkers at positions `p`, with
+              shape `(nwalkers, ndim)`.
+
+            * ``blob`` - (if `lnprobfn` returns blobs) The list of blob data for the walkers at
+              positions `p`.
         """
 
         m = self.pool.map
@@ -658,7 +703,7 @@ class Sampler(object):
 
         if self._kde is not None:
             if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
-                results = list(m(GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p0))
+                results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p0))
 
                 if lnpost0 is None:
                     lnpost0 = np.array([r[0] for r in results])
