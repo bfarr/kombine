@@ -28,7 +28,7 @@ def _initializer_wrapper(initializer, *args):
 class Pool(MPPool):
     """
     A modified :class:`multiprocessing.pool.Pool` that handles
-    ``KeyboardInterrupts`` in the :func:`map` method more gracefully.
+    :exc:`KeyboardInterrupts` in the :func:`map` method more gracefully.
 
     :param processes: (optional)
         The number of processes to use (defaults to number of CPUs).
@@ -40,7 +40,7 @@ class Pool(MPPool):
         Arguments for *initializer*; called as ``initializer(*initargs)``.
 
     :param kwargs: (optional)
-        Extra arguments. Python 2.7 supports a ``maxtasksperchild`` parameter.
+        Extra arguments. Python 2.7 supports a `maxtasksperchild` parameter.
     """
     def __init__(self, processes=None, initializer=None, initargs=(),
                  **kwargs):
@@ -52,7 +52,7 @@ class Pool(MPPool):
 
     def map(self, func, items, chunksize=None):
         """
-        A replacement for ``map()`` that handles ``KeyboardInterrupt``.
+        A replacement for :func:`map` that handles :exc:`KeyboardInterrupt`.
 
         :param func:
             Function to apply to the items.
