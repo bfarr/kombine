@@ -17,15 +17,15 @@ np.seterr(divide='ignore')
 def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
     """
     Iteratively run a k-means clustering algorithm, estimating the distibution of each identified
-    cluster with an independent kernel density estimate.  Starting with k = 1, the distribution is
-    estimated and the Bayes Information criterion (BIC) is calculated.  k is increased until the BIC
-    stops increasing.
+    cluster with an independent kernel density estimate.  Starting with ``k = 1``, the distribution
+    is estimated and the Bayes Information criterion (BIC) is calculated.  `k` is increased until
+    the BIC stops increasing.
 
     :param data:
         An `(N, ndim)`-shaped array, containing `N` samples from the target distribution.
 
     :param pool: (optional)
-        A pool of processes with a :func:``map`` function to use.
+        A pool of processes with a :func:`map` function to use.
 
     :param kde: (optional)
         An old KDE to inherit samples from.
@@ -35,7 +35,7 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
         supplied and adding the samples from it will go over this, old samples are thinned by
         factors of two until under the limit.
 
-    :param **kwargs: (optional)
+    :param kwargs: (optional)
         Keyword arguments to pass to :class:`ClusteredKDE`.
 
     :returns: :meth:`ClusteredKDE` that maximizes the BIC.
@@ -148,11 +148,12 @@ class ClusteredKDE(object):
         return data * self._std + self._mean
 
     def bic(self, pool=None):
-        """Evaluate Bayes Information Criterion for the KDE's estimate of the distribution
+        r"""
+        Evaluate Bayes Information Criterion for the KDE's estimate of the distribution
 
         .. math::
 
-           \mathrm{BIC} = \mathrm{ln}\mathcal{L}_\mathrm{max} - \frac{d_m}{2}\mathrm{ln}N,
+            \mathrm{BIC} = \mathrm{ln}\mathcal{L}_\mathrm{max} - \frac{d_m}{2} \mathrm{ln} N
 
         where :math:`d_m` is the number of dimensions of the KDE model (:math:`n_\mathrm{clusters}
         d` centroid location parameters, :math:`n_\mathrm{clusters} - 1` normalized weights, and
@@ -232,7 +233,7 @@ class KDE(object):
         return self
 
     def _set_bandwidth(self):
-        """
+        r"""
         Use Scott's rule to set the kernel bandwidth:
 
         .. math::
@@ -429,7 +430,7 @@ class TransdimensionalKDE(object):
 
     @property
     def kdes(self):
-        """List of fixed-dimension :meth:`ClusteredKDE`s"""
+        """List of fixed-dimension :meth:`ClusteredKDE` s"""
         return self._kdes
 
     @property
@@ -467,7 +468,7 @@ def _evaluate_point_logpdf(args):
 
 
 def oas_cov(pts):
-    """
+    r"""
     Estimate the covariance matrix using the Oracle Approximating Shrinkage algorithm
 
     .. math::

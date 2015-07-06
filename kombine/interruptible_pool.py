@@ -3,10 +3,12 @@ This is a drop-in replacement for multiprocessing's pool that
 plays better with keyboard interrupts.  This implimentation is a modified
 version of one originally written by Peter K. G. Williams <peter@newton.cx>
 for emcee:
- * `<https://github.com/dfm/emcee/blob/master/emcee/interruptible_pool.py>`_
+
+    * `<https://github.com/dfm/emcee/blob/master/emcee/interruptible_pool.py>`_
 
 which was an adaptation of a method written by John Reese, shared as
- * `<https://github.com/jreese/multiprocessing-keyboardinterrupt/>`_
+
+    * `<https://github.com/jreese/multiprocessing-keyboardinterrupt/>`_
 """
 
 import signal
@@ -27,8 +29,8 @@ def _initializer_wrapper(initializer, *args):
 
 class Pool(MPPool):
     """
-    A modified :class:`multiprocessing.pool.Pool` that handles
-    :exc:`KeyboardInterrupts` in the :func:`map` method more gracefully.
+    A modified :class:`multiprocessing.pool.Pool` that handles :exc:`KeyboardInterrupts` in the
+    :func:`map` method more gracefully.
 
     :param processes: (optional)
         The number of processes to use (defaults to number of CPUs).
