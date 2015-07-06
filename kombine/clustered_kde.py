@@ -114,7 +114,7 @@ class ClusteredKDE(object):
         self._assignments, _ = vq(white_data, self.centroids)
 
         self._kdes = [KDE(self.data[self.assignments == c]) for c in range(k)]
-        self._logweights = np.log([np.sum(self.assignments == c)/float(len(self))
+        self._logweights = np.log([np.sum(self.assignments == c)/float(self.size)
                                    for c in range(k)])
 
     def draw(self, size=1):
@@ -172,7 +172,7 @@ class ClusteredKDE(object):
         # Separate kernel covariances for each cluster
         nparams += self.nclusters * (self.ndim + 1) * self.ndim/2.0
 
-        return log_l - nparams/2.0 * np.log(len(self))
+        return log_l - nparams/2.0 * np.log(self.size)
 
     @property
     def data(self):
@@ -241,14 +241,14 @@ class KDE(object):
 
         Also store Cholesky decomposition for later.
         """
-        if len(self) > 0:
-            self._kernel_cov = self._cov * len(self) ** (-2./(self.ndim + 4))
+        if self.size > 0:
+            self._kernel_cov = self._cov * self.size ** (-2./(self.ndim + 4))
 
             # Used to evaluate PDF with cho_solve()
             self._cho_factor = la.cho_factor(self._kernel_cov)
 
             # Make sure the estimated PDF integrates to 1.0
-            self._lognorm = self.ndim/2.0 * np.log(2.0*np.pi) + np.log(len(self)) +\
+            self._lognorm = self.ndim/2.0 * np.log(2.0*np.pi) + np.log(self.size) +\
                 np.sum(np.log(np.diag(self._cho_factor[0])))
 
         else:
@@ -259,14 +259,14 @@ class KDE(object):
         Draw samples from the estimated distribution.
         """
         # Return nothing if this is an empty KDE
-        if len(self) == 0:
+        if self.size == 0:
             return []
 
         # Draw vanilla samples from a zero-mean multivariate Gaussian
         draws = np.random.multivariate_normal(np.zeros(self.ndim), self._kernel_cov, size=size)
 
         # Pick N random kernels as means
-        kernels = np.random.randint(0, len(self), size)
+        kernels = np.random.randint(0, self.size, size)
 
         # Shift vanilla draws to be about chosen kernels
         return self.data[kernels] + draws
@@ -285,7 +285,7 @@ class KDE(object):
             this_map = map
 
         # Return -inf if this is an empty KDE
-        if len(self) == 0:
+        if self.size == 0:
             results = np.zeros(npts) - np.inf
 
         else:
