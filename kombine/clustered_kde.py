@@ -222,10 +222,12 @@ class KDE(object):
 
     """
     def __init__(self, data):
-        self._data = data
+        self._data = np.atleast_2d(data)
 
         self._mean = np.mean(data, axis=0)
-        self._cov = oas_cov(data)
+
+        if self.data.shape[0] > 1:
+            self._cov = oas_cov(data)
 
         self._set_bandwidth()
 
@@ -486,7 +488,7 @@ def oas_cov(pts):
     <https://github.com/scikit-learn/scikit-learn/blob/31c5497/
     sklearn/covariance/shrunk_covariance_.py>`_.
     """
-    pts = np.asarray(pts)
+    pts = np.atleast_2d(pts)
     npts, ndim = pts.shape
 
     emperical_cov = np.cov(pts, rowvar=0)
