@@ -124,7 +124,7 @@ class ClusteredKDE(object):
         clusters = np.searchsorted(cumulative_weights, np.random.rand(size))
 
         draws = np.empty((size, self.ndim))
-        for cluster in xrange(self.nclusters):
+        for cluster in range(self.nclusters):
             sel = clusters == cluster
             draws[sel] = self._kdes[cluster].draw(np.sum(sel))
 
@@ -294,7 +294,7 @@ class KDE(object):
 
         else:
             args = [(pt, self.data, self._cho_factor) for pt in pts]
-            results = this_map(_evaluate_point_logpdf, args)
+            results = list(this_map(_evaluate_point_logpdf, args))
 
         # Normalize and return
         return np.array(results) - self._lognorm
@@ -410,7 +410,7 @@ class TransdimensionalKDE(object):
             space_inds = np.searchsorted(cumulative_weights, np.random.rand(size))
 
         draws = ma.masked_all((size, self._max_ndim))
-        for space_id in xrange(len(self.spaces)):
+        for space_id in range(len(self.spaces)):
             sel = space_inds == space_id
             n_fixedd = np.sum(sel)
             if n_fixedd > 0:

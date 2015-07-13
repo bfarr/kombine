@@ -4,6 +4,9 @@
 A kernel-density-based, embarrassingly parallel ensemble sampler.
 """
 
+from __future__ import (division, print_function, absolute_import,
+                        unicode_literals)
+
 import numpy as np
 import numpy.ma as ma
 
@@ -200,13 +203,13 @@ class Sampler(object):
 
             # Use the fraction of acceptances in the last step to estimate acceptance rate
             #   Bottom out at 1% if acceptances are really bad
-            last_acc_rate = np.max(np.mean(self.acceptance[-1]), 0.01)
+            last_acc_rate = max(np.mean(self.acceptance[-1]), 0.01)
 
             # Estimate ACT based on acceptance
-            act = 2./last_acc_rate - 1
+            act = 2/last_acc_rate - 1
 
             # Use the ACT to set the new test interval, but avoid overstepping a specified max
-            test_interval = min(int(step_size*act), max_iter - self.iterations)
+            test_interval = int(min(step_size*act, max_iter - self.iterations))
 
             results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
                                     freeze_transd=freeze_transd, **kwargs)
@@ -218,7 +221,7 @@ class Sampler(object):
 
             # Quit if we hit the max
             if self.iterations >= max_iter:
-                print "Burnin hit {} iterations before completing.".format(max_iter)
+                print("Burnin hit {} iterations before completing.".format(max_iter))
                 break
 
             if self.consistent_acceptance_rate():
@@ -350,7 +353,7 @@ class Sampler(object):
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
 
-        for i in xrange(int(iterations)):
+        for i in range(int(iterations)):
             try:
                 spaces = None
                 if freeze_transd:
@@ -376,7 +379,7 @@ class Sampler(object):
                     self.rollback(self.stored_iterations)
                     self._failed_p = p_p
 
-                    print "Offending samples stored in ``failed_p``."
+                    print("Offending samples stored in ``failed_p``.")
                     raise
 
                 # Calculate the (ln) Metropolis-Hastings ratio
@@ -582,7 +585,7 @@ class Sampler(object):
 
         # Use the mean acceptance rate of the last step to set the window
         if window is None:
-            window = int(20 * 1.0/np.mean(self.acceptance[-1]))
+            window = 20 * 1//np.mean(self.acceptance[-1])
 
         rates = np.empty((self.nwalkers, N - window + 1))
         weights = np.ones(window)/window
