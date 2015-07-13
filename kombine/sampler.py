@@ -93,16 +93,15 @@ class Sampler(object):
 
         self.processes = processes
 
-        # operate in serial (1 process)
-        if self.processes == 1 and pool is None:
+        if pool is not None:
+            self.pool = pool
+
+        elif self.processes == 1:
             self.pool = SerialPool()
 
-        # create a multiprocessing pool
-        elif pool is None:
-            self.pool = Pool(self.processes)
-
         else:
-            self.pool = pool
+            # create a multiprocessing pool
+            self.pool = Pool(self.processes)
 
         if not hasattr(self.pool, 'map'):
             raise AttributeError("Pool object must have a map() method.")
@@ -186,7 +185,8 @@ class Sampler(object):
         step_size = 2
         while step_size <= test_steps:
             # Update the proposal
-            self.update_proposal(p0, pool=self.pool, max_samples=self.nwalkers)
+            if p0 is not None:
+                self.update_proposal(p0, pool=self.pool, max_samples=self.nwalkers)
 
             # Take one step to estimate acceptance rate
             test_interval = 1
@@ -427,6 +427,15 @@ class Sampler(object):
                     yield p, lnpost, lnprop
 
             except KeyboardInterrupt:
+                # Close the old pool and open a new one
+                self.pool.close()
+
+                if self.processes == 1:
+                    self.pool = SerialPool()
+                else:
+                    # create a multiprocessing pool
+                    self.pool = Pool(self.processes)
+
                 if storechain:
                     self.rollback(self.stored_iterations)
                 raise
@@ -635,11 +644,6 @@ class Sampler(object):
         self._lnprop = self._lnprop[:iteration]
         self._acceptance = self._acceptance[:iteration]
         self._blobs = self._blobs[:iteration]
-
-        # Close the old pool and open a new one
-        if self.processes != 1 and isinstance(self.pool, Pool):
-            self.pool.close()
-            self.pool = Pool(self.processes)
 
     def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None, **kwargs):
         """
