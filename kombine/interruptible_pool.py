@@ -45,8 +45,8 @@ def disable_openblas_threading():
     except KeyError:
         np_lib_dir = None
 
-    try_paths = [np_lib_dir+'/libopenblas.so',
-                 np_lib_dir+'/libopenblas.dylib',
+    try_paths = ['{}/libopenblas.so'.format(np_lib_dir),
+                 '{}/libopenblas.dylib'.format(np_lib_dir),
                  '/opt/OpenBLAS/lib/libopenblas.so',
                  '/lib/libopenblas.so',
                  '/usr/lib/libopenblas.so.0',
