@@ -225,6 +225,7 @@ class KDE(object):
         self._data = np.atleast_2d(data)
 
         self._mean = np.mean(data, axis=0)
+        self._cov = None
 
         if self.data.shape[0] > 1:
             self._cov = oas_cov(data)
@@ -244,7 +245,7 @@ class KDE(object):
 
         Also store Cholesky decomposition for later.
         """
-        if self.size > 0:
+        if self.size > 0 and self._cov is not None:
             self._kernel_cov = self._cov * self.size ** (-2./(self.ndim + 4))
 
             # Used to evaluate PDF with cho_solve()
@@ -288,7 +289,7 @@ class KDE(object):
             this_map = map
 
         # Return -inf if this is an empty KDE
-        if self.size == 0:
+        if np.isinf(self._lognorm):
             results = np.zeros(npts) - np.inf
 
         else:
