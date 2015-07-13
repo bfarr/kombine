@@ -59,10 +59,10 @@ def disable_openblas_threading():
         except OSError:
             continue
 
-    if openblas_lib is None:
-        raise EnvironmentError('Could not locate an OpenBLAS shared library', 2)
-    else:
+    try:
         openblas_lib.openblas_set_num_threads(1)
+    except AttributeError:
+        raise EnvironmentError('Could not locate an OpenBLAS shared library', 2)
 
 
 class Pool(MPPool):
