@@ -10,3 +10,4 @@ dist
 *.pyc
 notebooks/
 .ipynb_checkpoints/
+env/
