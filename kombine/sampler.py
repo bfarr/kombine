@@ -41,9 +41,10 @@ if "accelerate" in config_info or "veclib" in config_info:
     from multiprocessing.pool import ThreadPool as Pool
 
 else:
-    # Disable openblas threading; overhead isn't worth it
-    from .interruptible_pool import disable_openblas_threading
-    disable_openblas_threading()
+    if "openblas" in config_info:
+        # Disable openblas threading; overhead isn't worth it
+        from .interruptible_pool import disable_openblas_threading
+        disable_openblas_threading()
 
     from .interruptible_pool import Pool
 
