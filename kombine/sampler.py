@@ -33,6 +33,7 @@ if "accelerate" in config_info or "veclib" in config_info:
                   brew install numpy --with-openblas
                   brew install scipy --with-openblas
 
+              To maintain stability, multiprocessing won't be used.
               """)
     warnings.warn(msg)
 
