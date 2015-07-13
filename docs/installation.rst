@@ -14,7 +14,7 @@ Installing with `pip` is a one-liner::
 
 
 Development Version
-------------------
+-------------------
 
 The source repository can be cloned from github::
 
