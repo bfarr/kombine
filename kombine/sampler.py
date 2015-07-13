@@ -7,13 +7,50 @@ A kernel-density-based, embarrassingly parallel ensemble sampler.
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
+import warnings
 import numpy as np
+
+try:
+    config_info = str([value for key, value in
+                       np.__config__.__dict__.iteritems()
+                       if key.endswith("_info")]).lower()
+except AttributeError:
+    config_info = str([value for key, value in
+                       np.__config__.__dict__.items()
+                       if key.endswith("_info")]).lower()
+
+if "accelerate" in config_info or "veclib" in config_info:
+    msg = ("""Numpy linked against 'Accelerate.framework', which
+              doesn't play nicely with 'multiprocessing'.
+
+              Building numpy against OpenBLAS can avoid this, e.g.:
+
+                  brew tap homebrew/python
+                  brew update && brew upgrade
+
+                  brew install openblas
+
+                  brew install numpy --with-openblas
+                  brew install scipy --with-openblas
+
+              """)
+    warnings.warn(msg)
+
+    # Disable by replacing with dummy implementation using threads.
+    from multiprocessing.pool import ThreadPool as Pool
+
+else:
+    # Disable openblas threading; overhead isn't worth it
+    from .interruptible_pool import disable_openblas_threading
+    disable_openblas_threading()
+
+    from .interruptible_pool import Pool
+
+from .serialpool import SerialPool
 import numpy.ma as ma
 
 from scipy.stats import chi2_contingency
 
-from .interruptible_pool import Pool
-from .serialpool import SerialPool
 from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 class _GetLnProbWrapper(object):

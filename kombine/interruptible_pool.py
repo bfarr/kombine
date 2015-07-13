@@ -27,6 +27,44 @@ def _initializer_wrapper(initializer, *args):
         initializer(*args)
 
 
+def disable_openblas_threading():
+    """
+    A convenience function for turning off openblas threading to avoid costly overhead.
+
+    Just setting the `OPENBLAS_NUM_THREADS` environment variable to `1` would be much simpler, but
+    that only works if the user hasn't already imported `numpy`.  This function attempts to use
+    `ctypes` to load the OpenBLAS library and access the `openblas_set_num_threads` function, which
+    will work even if the user already imported numpy or scipy.
+    """
+    import numpy as np
+    import ctypes
+    from ctypes.util import find_library
+
+    try:
+        np_lib_dir = np.__config__.__dict__['openblas_info']['library_dirs'][0]
+    except KeyError:
+        np_lib_dir = None
+
+    try_paths = [np_lib_dir+'/libopenblas.so',
+                 np_lib_dir+'/libopenblas.dylib',
+                 '/opt/OpenBLAS/lib/libopenblas.so',
+                 '/lib/libopenblas.so',
+                 '/usr/lib/libopenblas.so.0',
+                 find_library('openblas')]
+
+    openblas_lib = None
+    for path in try_paths:
+        try:
+            openblas_lib = ctypes.cdll.LoadLibrary(path)
+        except OSError:
+            continue
+
+    if openblas_lib is None:
+        raise EnvironmentError('Could not locate an OpenBLAS shared library', 2)
+    else:
+        openblas_lib.openblas_set_num_threads(1)
+
+
 class Pool(MPPool):
     """
     A modified :class:`multiprocessing.pool.Pool` that handles :exc:`KeyboardInterrupts` in the
