@@ -4,8 +4,7 @@
 A kernel-density-based, embarrassingly parallel ensemble sampler.
 """
 
-from __future__ import (division, print_function, absolute_import,
-                        unicode_literals)
+from __future__ import (division, print_function, absolute_import, unicode_literals)
 
 import warnings
 import numpy as np
@@ -228,7 +227,7 @@ class Sampler(object):
         while step_size <= test_steps:
             # Update the proposal
             if p0 is not None:
-                self.update_proposal(p0, pool=self.pool, max_samples=self.nwalkers)
+                self.update_proposal(p0, max_samples=self.nwalkers)
 
             # Take one step to estimate acceptance rate
             test_interval = 1
@@ -356,7 +355,7 @@ class Sampler(object):
         if kde is not None:
             self._kde = kde
         elif self._kde is None:
-            self.update_proposal(p, max_samples=self._kde_size, pool=self.pool, **kwargs)
+            self.update_proposal(p, max_samples=self._kde_size, **kwargs)
 
         lnpost = lnpost0
         lnprop = lnprop0
@@ -429,7 +428,7 @@ class Sampler(object):
 
                 # Decide which of the remainder will be accepted
                 worse = ~acc
-                nworse = np.sum(worse)
+                nworse = np.count_nonzero(worse)
                 uniform_draws = np.random.rand(nworse)
                 acc[worse] = ln_mh_ratio[worse] > np.log(uniform_draws)
 
@@ -458,7 +457,7 @@ class Sampler(object):
 
                 # Update the proposal at the requested interval
                 if self.trigger_update(update_interval):
-                    self.update_proposal(p, max_samples=self._kde_size, pool=self.pool, **kwargs)
+                    self.update_proposal(p, max_samples=self._kde_size, **kwargs)
 
                 self.iterations += 1
 
@@ -526,15 +525,12 @@ class Sampler(object):
 
         return trigger
 
-    def update_proposal(self, p, pool=None, max_samples=None, **kwargs):
+    def update_proposal(self, p, max_samples=None, **kwargs):
         """
         Update the proposal density with points `p`.
 
         :param p:
             Samples to update the proposal with.
-
-        :param pool: (optional)
-            A pool of processes with ``map`` function to use.
 
         :param max_samples: (optional)
             The maximum number of samples to use for constructing or updating the kde.  If a KDE is
@@ -665,7 +661,7 @@ class Sampler(object):
             X1, X2 = np.array_split(windowed_acceptances, 2)
 
             n1, n2 = len(X1), len(X2)
-            k1, k2 = np.sum(X1), np.sum(X2)
+            k1, k2 = np.count_nonzero(X1), np.count_nonzero(X2)
 
             # Use chi^2 contingency test to test whether the halves have consistent acceptances
             table = [[k1, k2], [n1 - k1, n2 - k2]]

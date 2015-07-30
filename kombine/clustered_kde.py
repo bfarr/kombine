@@ -4,6 +4,8 @@
 The kernel density estimators.
 """
 
+from __future__ import (division, print_function, absolute_import, unicode_literals)
+
 import numpy as np
 import numpy.ma as ma
 from scipy.misc import logsumexp
@@ -114,7 +116,7 @@ class ClusteredKDE(object):
         self._assignments, _ = vq(white_data, self.centroids)
 
         self._kdes = [KDE(self.data[self.assignments == c]) for c in range(k)]
-        self._logweights = np.log([np.sum(self.assignments == c)/float(self.size)
+        self._logweights = np.log([np.count_nonzero(self.assignments == c)/self.size
                                    for c in range(k)])
 
     def draw(self, size=1):
@@ -126,7 +128,7 @@ class ClusteredKDE(object):
         draws = np.empty((size, self.ndim))
         for cluster in range(self.nclusters):
             sel = clusters == cluster
-            draws[sel] = self._kdes[cluster].draw(np.sum(sel))
+            draws[sel] = self._kdes[cluster].draw(np.count_nonzero(sel))
 
         return draws
 
@@ -171,9 +173,9 @@ class ClusteredKDE(object):
         nparams += self.nclusters - 1
 
         # Separate kernel covariances for each cluster
-        nparams += self.nclusters * (self.ndim + 1) * self.ndim/2.0
+        nparams += self.nclusters * (self.ndim + 1) * self.ndim/2
 
-        return log_l - nparams/2.0 * np.log(self.size)
+        return log_l - nparams/2 * np.log(self.size)
 
     @property
     def data(self):
@@ -246,13 +248,13 @@ class KDE(object):
         Also store Cholesky decomposition for later.
         """
         if self.size > 0 and self._cov is not None:
-            self._kernel_cov = self._cov * self.size ** (-2./(self.ndim + 4))
+            self._kernel_cov = self._cov * self.size ** (-2/(self.ndim + 4))
 
             # Used to evaluate PDF with cho_solve()
             self._cho_factor = la.cho_factor(self._kernel_cov)
 
             # Make sure the estimated PDF integrates to 1.0
-            self._lognorm = self.ndim/2.0 * np.log(2.0*np.pi) + np.log(self.size) +\
+            self._lognorm = self.ndim/2 * np.log(2*np.pi) + np.log(self.size) +\
                 np.sum(np.log(np.diag(self._cho_factor[0])))
 
         else:
@@ -375,9 +377,8 @@ class TransdimensionalKDE(object):
             subspace = np.all(~data.mask == space, axis=1)
 
             # Determine weights from only the new samples
-            npts_subspace = np.sum(subspace)
-            weight = npts_subspace/float(npts_new)
-            weight = 1/float(len(self.spaces))
+            npts_subspace = np.count_nonzero(subspace)
+            weight = npts_subspace/npts_new
             weights.append(weight)
 
             fixd_data = data[subspace]
@@ -412,7 +413,7 @@ class TransdimensionalKDE(object):
         draws = ma.masked_all((size, self._max_ndim))
         for space_id in range(len(self.spaces)):
             sel = space_inds == space_id
-            n_fixedd = np.sum(sel)
+            n_fixedd = np.count_nonzero(sel)
             if n_fixedd > 0:
                 # Populate only the valid entries for this parameter space
                 draws[np.ix_(sel, self._spaces[space_id])] = self.kdes[space_id].draw(n_fixedd)
@@ -467,7 +468,7 @@ def _evaluate_point_logpdf(args):
     diff *= tdiff
 
     # Work in the log to avoid large numbers
-    return logsumexp(-np.sum(diff, axis=1)/2.0)
+    return logsumexp(-np.sum(diff, axis=1)/2)
 
 
 def oas_cov(pts):
@@ -497,10 +498,10 @@ def oas_cov(pts):
 
     alpha = np.mean(emperical_cov * emperical_cov)
     num = alpha + mean * mean
-    den = (npts + 1.) * (alpha - (mean * mean) / ndim)
+    den = (npts + 1) * (alpha - (mean * mean) / ndim)
 
-    shrinkage = min(num / den, 1.)
-    shrunk_cov = (1. - shrinkage) * emperical_cov
+    shrinkage = min(num / den, 1)
+    shrunk_cov = (1 - shrinkage) * emperical_cov
     shrunk_cov.flat[::ndim + 1] += shrinkage * mean
 
     return shrunk_cov
