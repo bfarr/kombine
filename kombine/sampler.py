@@ -53,7 +53,7 @@ else:
 from .serialpool import SerialPool
 import numpy.ma as ma
 
-from scipy.stats import chi2_contingency
+from scipy.stats import chisquare
 
 from .clustered_kde import optimized_kde, TransdimensionalKDE
 
@@ -636,15 +636,15 @@ class Sampler(object):
     def consistent_acceptance_rate(self, window_size=None, critical_pval=0.05):
         """
         A convenience function for :meth:`burnin` and :meth:`trigger_update`.  Returns ``True``
-        if the acceptances of the two halves of the window are consistent with having the same
-        acceptance rates.  This is done using a chi-squared contingency test.
+        if the number of acceptances each step are consistent with the acceptance rate of the
+        last step.  This is done using a chi-squared test.
 
         :param window_size:
             Number of iterations to look back for acceptances.  If ``None``, the iteration of the
             last proposal update (from :attr:`updates`) is used.
 
         :param critical_pval:
-            The critial p-value for considering the distributions consistent.  If the calculated
+            The critial p-value for considering the distribution consistent.  If the calculated
             p-value is over this, then ``True`` is returned.
         """
         if window_size is None:
@@ -660,15 +660,12 @@ class Sampler(object):
         # If window is really small, return `consistent` to avoid gratuitous updating
         consistent = True
         if window_length > 2:
-            windowed_acceptances = self.acceptance[window_start:self.iterations].flatten()
-            X1, X2 = np.array_split(windowed_acceptances, 2)
+            last_acc_rate = self.acceptance_fraction[-1]
 
-            n1, n2 = len(X1), len(X2)
-            k1, k2 = np.count_nonzero(X1), np.count_nonzero(X2)
+            nacc = self.nwalkers * self.acceptance_fraction[window_start:self.iterations]
+            expected_freqs = last_acc_rate * self.nwalkers * np.ones_like(nacc)
 
-            # Use chi^2 contingency test to test whether the halves have consistent acceptances
-            table = [[k1, k2], [n1 - k1, n2 - k2]]
-            p_val = chi2_contingency(table)[1]
+            _, p_val = chisquare(nacc, expected_freqs)
 
             if p_val < critical_pval:
                 consistent = False
