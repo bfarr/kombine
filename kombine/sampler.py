@@ -7,40 +7,43 @@ A kernel-density-based, embarrassingly parallel ensemble sampler.
 from __future__ import (division, print_function, absolute_import, unicode_literals)
 
 import warnings
+import textwrap
 import numpy as np
 
 try:
-    config_info = str([value for key, value in
+    CONFIG_INFO = str([value for key, value in
                        np.__config__.__dict__.iteritems()
                        if key.endswith("_info")]).lower()
 except AttributeError:
-    config_info = str([value for key, value in
+    CONFIG_INFO = str([value for key, value in
                        np.__config__.__dict__.items()
                        if key.endswith("_info")]).lower()
 
-if "accelerate" in config_info or "veclib" in config_info:
-    msg = ("""Numpy linked against 'Accelerate.framework', which
-              doesn't play nicely with 'multiprocessing'.
+if "accelerate" in CONFIG_INFO or "veclib" in CONFIG_INFO:
+    warnings.warn(textwrap.dedent(
+        """
+        Numpy linked against 'Accelerate.framework', which  doesn't play nicely
+        with 'multiprocessing'.
 
-              Building numpy against OpenBLAS can avoid this, e.g.:
+        Building numpy against OpenBLAS can avoid this, e.g.:
 
-                  brew tap homebrew/python
-                  brew update && brew upgrade
+            brew tap homebrew/python
+            brew update && brew upgrade
 
-                  brew install openblas
+            brew install openblas
 
-                  brew install numpy --with-openblas
-                  brew install scipy --with-openblas
+            brew install numpy --with-openblas
+            brew install scipy --with-openblas
 
-              To maintain stability, multiprocessing won't be used.
-              """)
-    warnings.warn(msg)
+        To maintain stability, multiprocessing won't be used.
+        """
+    ))
 
     # Disable by replacing with dummy implementation using threads.
     from multiprocessing.pool import ThreadPool as Pool
 
 else:
-    if "openblas" in config_info:
+    if "openblas" in CONFIG_INFO:
         # Disable openblas threading; overhead isn't worth it
         from .interruptible_pool import disable_openblas_threading
         disable_openblas_threading()
@@ -63,8 +66,8 @@ class _GetLnProbWrapper(object):
 
     def lnprobs(self, p):
         """
-        Evaluate the log probability density of the stored target distribution fuction and KDE at
-        `p`.
+        Evaluate the log probability density of the stored target distribution fuction
+        and KDE at `p`.
 
         :param p: Location to evaluate probability densties at.
 
@@ -89,8 +92,8 @@ class Sampler(object):
     """
     An Ensemble sampler.
 
-    The :attr:`chain` member of this object has the shape: `(nsteps, nwalkers, ndim)` where `nsteps`
-    is the stored number of steps taken thus far.
+    The :attr:`chain` member of this object has the shape: `(nsteps, nwalkers, ndim)` where
+    `nsteps` is the stored number of steps taken thus far.
 
     :param nwalkers:
         The number of individual MCMC chains to include in the ensemble.
@@ -759,3 +762,4 @@ class Sampler(object):
         self._last_run_mcmc_result = results[:3]
 
         return results
+
