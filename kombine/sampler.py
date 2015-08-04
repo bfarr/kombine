@@ -255,6 +255,9 @@ class Sampler(object):
             # Use the ACT to set the new test interval, but avoid overstepping a specified max
             test_interval = int(min(step_size*act, max_iter - self.iterations))
 
+            # Make sure we're taking at least one step
+            test_interval = max(test_interval, 1)
+
             results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
                                     freeze_transd=freeze_transd, spaces=self._burnin_spaces,
                                     **kwargs)
