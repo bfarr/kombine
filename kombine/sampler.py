@@ -162,6 +162,7 @@ class Sampler(object):
         self._blobs = []
 
         self._last_run_mcmc_result = None
+        self._burnin_spaces = None
         self._failed_p = None
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
@@ -221,6 +222,7 @@ class Sampler(object):
         freeze_transd = False
         if self._transd:
             freeze_transd = True
+            self._burnin_spaces = ~p0.mask
 
         max_iter = np.inf
         if max_steps is not None:
@@ -235,7 +237,8 @@ class Sampler(object):
             # Take one step to estimate acceptance rate
             test_interval = 1
             results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
-                                    freeze_transd=freeze_transd, **kwargs)
+                                    freeze_transd=freeze_transd, spaces=self._burnin_spaces,
+                                    **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
@@ -253,7 +256,8 @@ class Sampler(object):
             test_interval = int(min(step_size*act, max_iter - self.iterations))
 
             results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
-                                    freeze_transd=freeze_transd, **kwargs)
+                                    freeze_transd=freeze_transd, spaces=self._burnin_spaces,
+                                    **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
@@ -277,7 +281,7 @@ class Sampler(object):
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                iterations=1, kde=None, update_interval=None, kde_size=None,
-               freeze_transd=False, storechain=True, **kwargs):
+               freeze_transd=False, spaces=None, storechain=True, **kwargs):
         """
         Advance the ensemble `iterations` steps as a generator.
 
@@ -316,6 +320,10 @@ class Sampler(object):
             If ``True`` when transdimensional sampling, walkers are confined to their parameter
             space.  This is helpful during burnin, and allows fox fixed-D burnin before
             transdimensional sampling.
+
+        :param spaces: (optional)
+            Confine walkers to the requested parameter spaces. Expects an inverted mask with shape
+            `(nwalkers, ndim)`.
 
         :param storechain: (optional)
             Flag for disabling chain and probability density storage in :attr:`chain`,
@@ -396,8 +404,7 @@ class Sampler(object):
 
         for i in range(int(iterations)):
             try:
-                spaces = None
-                if freeze_transd:
+                if freeze_transd and spaces is None:
                     spaces = ~p.mask
                 # Draw new walker locations from the proposal
                 p_p = self.draw(self.nwalkers, spaces=spaces)

@@ -346,10 +346,6 @@ class TransdimensionalKDE(object):
     :param data:
         An `(N, max_dim)`-shaped masked array, containing N samples from the the target distribution.
 
-    :param uniform_weight: (optional)
-        When ``True``, weight is placed evenly across parameter spaces.  This is useful during
-        burnin, when one parameter space may burnin faster than others.
-
     :param kde: (optional)
         An old trans-dimensional KDE to inherit samples from.
 
@@ -383,7 +379,7 @@ class TransdimensionalKDE(object):
 
             fixd_data = data[subspace]
             if npts_subspace > 0:
-                fixd_data = fixd_data[~fixd_data.mask].reshape((npts_subspace, -1))
+                fixd_data = np.asarray(fixd_data[~fixd_data.mask].reshape((npts_subspace, -1)))
 
             old_kde = None
             if kde is not None:
