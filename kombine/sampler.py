@@ -436,6 +436,7 @@ class Sampler(object):
                 # Update the proposal at the requested interval
                 if self.trigger_update(update_interval):
                     self.update_proposal(p, max_samples=self._kde_size, **kwargs)
+                    lnprop = self._kde(p)
 
                 self.iterations += 1
 

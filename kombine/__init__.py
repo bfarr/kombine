@@ -8,4 +8,4 @@ from .clustered_kde import *
 from . import utils
 
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"
