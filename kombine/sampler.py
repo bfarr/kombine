@@ -6,16 +6,16 @@ A kernel-density-based, embarrassingly parallel ensemble sampler.
 
 from __future__ import (division, print_function, absolute_import, unicode_literals)
 
-import numpy as np
 from .utils import mp_safe_blas, disable_openblas_threading
 
-if mp_safe_blas():
+if not mp_safe_blas():
     from multiprocessing.pool import ThreadPool as Pool
 else:
     disable_openblas_threading()
     from .interruptible_pool import Pool
 
 from .serialpool import SerialPool
+import numpy as np
 import numpy.ma as ma
 
 from scipy.stats import chisquare
