@@ -230,7 +230,14 @@ class KDE(object):
         self._cov = None
 
         if self.data.shape[0] > 1:
-            self._cov = oas_cov(data)
+            try:
+                self._cov = np.cov(data.T)
+
+                # Try factoring now to see if regularization is needed
+                la.cho_factor(self._cov)
+
+            except la.LinAlgError:
+                self._cov = oas_cov(data)
 
         self._set_bandwidth()
 
@@ -489,7 +496,7 @@ def oas_cov(pts):
     pts = np.atleast_2d(pts)
     npts, ndim = pts.shape
 
-    emperical_cov = np.cov(pts, rowvar=0)
+    emperical_cov = np.cov(pts.T)
     mean = np.trace(emperical_cov) / ndim
 
     alpha = np.mean(emperical_cov * emperical_cov)
@@ -498,6 +505,6 @@ def oas_cov(pts):
 
     shrinkage = min(num / den, 1)
     shrunk_cov = (1 - shrinkage) * emperical_cov
-    shrunk_cov.flat[::ndim + 1] += shrinkage * mean
+    shrunk_cov[np.diag_indices(ndim)] += shrinkage * mean
 
     return shrunk_cov
