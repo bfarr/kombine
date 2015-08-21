@@ -12,6 +12,9 @@ Installing with `pip` is a one-liner::
 
     pip install kombine
 
+Or, if you don't have admin privileges::
+
+    pip install --user kombine
 
 Development Version
 -------------------
