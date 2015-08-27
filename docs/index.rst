@@ -16,16 +16,20 @@ Construct an 8-D bimodal target distribution::
 
     class Target(object):
         def __init__(self, ndim, nmodes):
+            # Generate random inverse variances for each dimension
             self.ivar = 1. / np.random.rand(ndim)
+
+            # Space modes 5-sigma apart
             std = np.sqrt(1/self.ivar)
-            self.means = 5 * std * np.arange(nmodes)
+            self.means = 5 * std * np.arange(nmodes)[:, np.newaxis]
 
         def __call__(self, x):
             ivar, means = self.ivar, self.means
             lnprobs = [-np.sum(ivar * (x - mu) ** 2)/2 for mu in means]
             return np.logaddexp.reduce(lnprobs)
 
-    ndim, nmode = 8, 2
+    ndim, nmodes = 8, 2
+    lnprob = Target(ndim, nmodes)
 
 Sample the target distribution::
 
@@ -35,7 +39,7 @@ Sample the target distribution::
     sampler = kombine.Sampler(nwalkers, ndim, lnprob)
 
     p0 = 5 * (5 * np.random.rand(nwalkers, ndim) - 1)
-    sampler.burnin(p0)
+    p, _, _ = sampler.burnin(p0)
 
 User Guide
 ----------
