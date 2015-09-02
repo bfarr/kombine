@@ -131,7 +131,7 @@ class Sampler(object):
         self._failed_p = None
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               test_steps=16, max_steps=None, **kwargs):
+               test_steps=16, max_steps=None, verbose=False, **kwargs):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
         splitting acceptances in half and checking for statistical consistency.  This isn't
@@ -159,6 +159,9 @@ class Sampler(object):
 
         :param max_steps: (optional)
             An absolute maximum number of steps to take, in case burnin is too painful.
+
+        :param verbose: (optional)
+            Print status messages each time a milestone is reached in the burnin.
 
         :param kwargs: (optional)
             The rest is passed to :meth:`run_mcmc`.
@@ -195,9 +198,12 @@ class Sampler(object):
 
         step_size = 2
         while step_size <= test_steps:
-            # Update the proposal
+            # Update the proposal            
             if p0 is not None:
                 self.update_proposal(p0, max_samples=self.nwalkers)
+                lnprop0 = self._kde(p0)
+            if verbose:
+                print('Updated proposal')
 
             # Take one step to estimate acceptance rate
             test_interval = 1
@@ -216,6 +222,10 @@ class Sampler(object):
 
             # Estimate ACT based on acceptance
             act = 2/last_acc_rate - 1
+
+            if verbose:
+                print('Single-step acceptance rate is ', last_acc_rate)
+                print('Producing ACT of ', act)
 
             # Use the ACT to set the new test interval, but avoid overstepping a specified max
             test_interval = int(min(step_size*act, max_iter - self.iterations))
@@ -238,7 +248,15 @@ class Sampler(object):
                 break
 
             if self.consistent_acceptance_rate():
+                if verbose:
+                    print('Acceptance rate constant over ', step_size, ' ACTs')
                 step_size *= 2
+            else:
+                if verbose:
+                    print('Acceptance rate varies, trying again')
+
+            if verbose:
+                print('') # Newline
 
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
 
@@ -335,6 +353,7 @@ class Sampler(object):
             self._kde = kde
         elif self._kde is None:
             self.update_proposal(p, max_samples=self._kde_size, **kwargs)
+            lnprop0 = self._kde(p)
 
         lnpost = lnpost0
         lnprop = lnprop0
@@ -585,7 +604,7 @@ class Sampler(object):
         the window is chosen automatically based on the fraction of acceptances in the ensembles
         last step.  See :meth:`windowed_acceptance_rate` if you want more control.
         """
-        return windowed_acceptance_rate()
+        return self.windowed_acceptance_rate()
 
     def windowed_acceptance_rate(self, window=None):
         """
