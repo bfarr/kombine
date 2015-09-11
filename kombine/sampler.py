@@ -222,15 +222,17 @@ class Sampler(object):
             last_acc_rate = max(np.mean(self.acceptance[-1]), 0.01)
 
             # Estimate ACT based on acceptance
-            act = 2/last_acc_rate - 1
+            act = int(np.ceil(2.0/last_acc_rate - 1.0))
 
             if verbose:
                 print('Single-step acceptance rate is ', last_acc_rate)
                 print('Producing ACT of ', act)
 
-            # Use the ACT to set the new test interval, but avoid overstepping a specified max
-            # We throw away the first act worth of steps as an initial burnin when comparing acceptance rates
-            test_interval = int(min((step_size+1)*act, max_iter - self.iterations))
+            # Use the ACT to set the new test interval, but avoid
+            # overstepping a specified max.  We throw away the first
+            # 2*act worth of steps as an initial burnin when comparing
+            # acceptance rates
+            test_interval = min((step_size+2)*act, max_iter - self.iterations)
 
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
@@ -252,7 +254,8 @@ class Sampler(object):
                 print("Burnin hit {} iterations before completing.".format(max_iter))
                 break
 
-            if self.consistent_acceptance_rate(window_size=int(round(step_size*act))):
+            # Only check for consistency past the burn-in stage of 2*act
+            if self.consistent_acceptance_rate(window_size=step_size*act):
                 if verbose:
                     print('Acceptance rate constant over ', step_size, ' ACTs')
                 step_size *= 2
@@ -483,6 +486,39 @@ class Sampler(object):
                 if storechain:
                     self.rollback(self.stored_iterations)
                 raise
+
+    def ln_ev(self, ndraws):
+        """Produces a Monte-Carlo estimate of the evidence integral using the
+        current propasal.
+
+        :param ndraws: The number of draws to make from the proposal
+          for the evidence estimate.
+
+        :return: ``(lnZ, dlnZ)``.  Evidence estimate and associated
+          uncertainty.
+        """
+
+        pts = self.draw(ndraws)
+
+        m = self.pool.map
+
+        results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), pts))
+        lnpost = np.array([r[0] for r in results])
+        lnprop = np.array([r[1] for r in results])
+
+        lninteg = lnpost - lnprop
+        lnZ = np.logaddexp.reduce(lninteg) - np.log(lninteg.shape[0])
+        lnZ2 = np.logaddexp.reduce(2.0*lninteg) - np.log(lninteg.shape[0])
+
+        # sigma^2 = <Z^2> - <Z>^2
+        # log(sigma^2) = log(<Z^2>) + log(1 - <Z>^2/<Z^2>)
+        # Standard error = sqrt(sigma^2/N)
+        lnsZ = 0.5*(lnZ2 + np.log1p(-np.exp(2.0*lnZ - lnZ2)) - np.log(lninteg.shape[0]))
+
+        # dlnZ = sigma / Z
+        dlnZ = np.exp(lnsZ - lnZ)
+
+        return lnZ, dlnZ
 
     def draw(self, size, spaces=None):
         """
