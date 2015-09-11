@@ -13,18 +13,17 @@ def bad_blas_msg(pkg_name):
     """A warning message to give the user"""
     return textwrap.dedent(
         """
-        {} linked against 'Accelerate.framework', which  doesn't play nicely
+        {0} linked against 'Accelerate.framework', which  doesn't play nicely
         with 'multiprocessing'.
 
-        Building numpy against OpenBLAS can avoid this, e.g.:
+        Building {0} against OpenBLAS can avoid this, e.g.:
 
             brew tap homebrew/python
             brew update && brew upgrade
 
             brew install openblas
 
-            brew install numpy --with-openblas
-            brew install scipy --with-openblas
+            brew install {0} --with-openblas
 
         To maintain stability, multiprocessing won't be used.
         """.format(pkg_name))
@@ -49,11 +48,11 @@ def mp_safe_blas():
     scipy_config_info = get_config_info(scipy)
 
     if "accelerate" in np_config_info or "veclib" in np_config_info:
-        warnings.warn(bad_blas_msg('Numpy'))
+        warnings.warn(bad_blas_msg('numpy'))
         safe_blas = False
 
     if "accelerate" in scipy_config_info or "veclib" in scipy_config_info:
-        warnings.warn(bad_blas_msg('Scipy'))
+        warnings.warn(bad_blas_msg('scipy'))
         safe_blas = False
 
     return safe_blas
