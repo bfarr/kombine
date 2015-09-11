@@ -131,7 +131,8 @@ class Sampler(object):
         self._failed_p = None
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               test_steps=16, max_steps=None, verbose=False, **kwargs):
+               test_steps=16, max_steps=None, verbose=False, callback=None,
+               **kwargs):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
         splitting acceptances in half and checking for statistical consistency.  This isn't
@@ -228,7 +229,8 @@ class Sampler(object):
                 print('Producing ACT of ', act)
 
             # Use the ACT to set the new test interval, but avoid overstepping a specified max
-            test_interval = int(min(step_size*act, max_iter - self.iterations))
+            # We throw away the first act worth of steps as an initial burnin when comparing acceptance rates
+            test_interval = int(min((step_size+1)*act, max_iter - self.iterations))
 
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
@@ -242,12 +244,15 @@ class Sampler(object):
                 p, lnpost, lnprop = results
                 blob = None
 
+            if callback is not None:
+                callback(self)
+
             # Quit if we hit the max
             if self.iterations >= max_iter:
                 print("Burnin hit {} iterations before completing.".format(max_iter))
                 break
 
-            if self.consistent_acceptance_rate():
+            if self.consistent_acceptance_rate(window_size=int(round(step_size*act))):
                 if verbose:
                     print('Acceptance rate constant over ', step_size, ' ACTs')
                 step_size *= 2
