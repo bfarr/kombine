@@ -131,7 +131,8 @@ class Sampler(object):
         self._failed_p = None
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               test_steps=16, max_steps=None, **kwargs):
+               test_steps=16, max_steps=None, verbose=False, callback=None,
+               **kwargs):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
         splitting acceptances in half and checking for statistical consistency.  This isn't
@@ -159,6 +160,9 @@ class Sampler(object):
 
         :param max_steps: (optional)
             An absolute maximum number of steps to take, in case burnin is too painful.
+
+        :param verbose: (optional)
+            Print status messages each time a milestone is reached in the burnin.
 
         :param kwargs: (optional)
             The rest is passed to :meth:`run_mcmc`.
@@ -195,9 +199,12 @@ class Sampler(object):
 
         step_size = 2
         while step_size <= test_steps:
-            # Update the proposal
+            # Update the proposal            
             if p0 is not None:
                 self.update_proposal(p0, max_samples=self.nwalkers)
+                lnprop0 = self._kde(p0)
+            if verbose:
+                print('Updated proposal')
 
             # Take one step to estimate acceptance rate
             test_interval = 1
@@ -215,10 +222,17 @@ class Sampler(object):
             last_acc_rate = max(np.mean(self.acceptance[-1]), 0.01)
 
             # Estimate ACT based on acceptance
-            act = 2/last_acc_rate - 1
+            act = int(np.ceil(2.0/last_acc_rate - 1.0))
 
-            # Use the ACT to set the new test interval, but avoid overstepping a specified max
-            test_interval = int(min(step_size*act, max_iter - self.iterations))
+            if verbose:
+                print('Single-step acceptance rate is ', last_acc_rate)
+                print('Producing ACT of ', act)
+
+            # Use the ACT to set the new test interval, but avoid
+            # overstepping a specified max.  We throw away the first
+            # 2*act worth of steps as an initial burnin when comparing
+            # acceptance rates
+            test_interval = min((step_size+2)*act, max_iter - self.iterations)
 
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
@@ -232,13 +246,25 @@ class Sampler(object):
                 p, lnpost, lnprop = results
                 blob = None
 
+            if callback is not None:
+                callback(self)
+
             # Quit if we hit the max
             if self.iterations >= max_iter:
                 print("Burnin hit {} iterations before completing.".format(max_iter))
                 break
 
-            if self.consistent_acceptance_rate():
+            # Only check for consistency past the burn-in stage of 2*act
+            if self.consistent_acceptance_rate(window_size=step_size*act):
+                if verbose:
+                    print('Acceptance rate constant over ', step_size, ' ACTs')
                 step_size *= 2
+            else:
+                if verbose:
+                    print('Acceptance rate varies, trying again')
+
+            if verbose:
+                print('') # Newline
 
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
 
@@ -335,6 +361,7 @@ class Sampler(object):
             self._kde = kde
         elif self._kde is None:
             self.update_proposal(p, max_samples=self._kde_size, **kwargs)
+            lnprop0 = self._kde(p)
 
         lnpost = lnpost0
         lnprop = lnprop0
@@ -459,6 +486,39 @@ class Sampler(object):
                 if storechain:
                     self.rollback(self.stored_iterations)
                 raise
+
+    def ln_ev(self, ndraws):
+        """Produces a Monte-Carlo estimate of the evidence integral using the
+        current propasal.
+
+        :param ndraws: The number of draws to make from the proposal
+          for the evidence estimate.
+
+        :return: ``(lnZ, dlnZ)``.  Evidence estimate and associated
+          uncertainty.
+        """
+
+        pts = self.draw(ndraws)
+
+        m = self.pool.map
+
+        results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), pts))
+        lnpost = np.array([r[0] for r in results])
+        lnprop = np.array([r[1] for r in results])
+
+        lninteg = lnpost - lnprop
+        lnZ = np.logaddexp.reduce(lninteg) - np.log(lninteg.shape[0])
+        lnZ2 = np.logaddexp.reduce(2.0*lninteg) - np.log(lninteg.shape[0])
+
+        # sigma^2 = <Z^2> - <Z>^2
+        # log(sigma^2) = log(<Z^2>) + log(1 - <Z>^2/<Z^2>)
+        # Standard error = sqrt(sigma^2/N)
+        lnsZ = 0.5*(lnZ2 + np.log1p(-np.exp(2.0*lnZ - lnZ2)) - np.log(lninteg.shape[0]))
+
+        # dlnZ = sigma / Z
+        dlnZ = np.exp(lnsZ - lnZ)
+
+        return lnZ, dlnZ
 
     def draw(self, size, spaces=None):
         """
@@ -585,7 +645,7 @@ class Sampler(object):
         the window is chosen automatically based on the fraction of acceptances in the ensembles
         last step.  See :meth:`windowed_acceptance_rate` if you want more control.
         """
-        return windowed_acceptance_rate()
+        return self.windowed_acceptance_rate()
 
     def windowed_acceptance_rate(self, window=None):
         """
