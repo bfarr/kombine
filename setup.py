@@ -25,5 +25,4 @@ setup(
     url='https://github.com/bfarr/kombine',
     include_package_data=True,
     packages=['kombine'],
-    install_requires=['numpy', 'scipy'],
 )
