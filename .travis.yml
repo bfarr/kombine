@@ -20,7 +20,7 @@ before_install:
 
 # Install packages
 install:
-  - conda install --yes python=$TRAVIS_PYTHON_VERSION atlas numpy scipy nose
+  - conda install --yes python=$TRAVIS_PYTHON_VERSION numpy scipy nose
   # Coverage packages are on my binstar channel
   - conda install --yes -c dan_blanchard python-coveralls nose-cov
   - python setup.py install
