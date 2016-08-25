@@ -12,7 +12,7 @@ before_install:
  - sudo apt-get install python-scipy
 
 install:
-  = pip install numpy
+  - pip install numpy
   - pip install nose
   - pip install coverage
   - pip install codecov
