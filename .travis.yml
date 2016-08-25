@@ -5,6 +5,9 @@ python:
   - "3.3"
   - "3.4"
 
+before_install:
+    - pip install codecov
+
 install:
   - sudo apt-get update
   # We do this conditionally because it saves us some downloading if the
@@ -22,7 +25,7 @@ install:
   # Useful for debugging any issues with conda
   - conda info -a
 
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy codecov
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy
   - source activate test-environment
   - python setup.py install
 
