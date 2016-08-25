@@ -13,5 +13,8 @@ install:
   - pip install coverage
   - pip install codecov
 
+script:
+  - nosetests --with-coverage --cover-package kombine
+
 after_success:
   - coveralls --config_file .coveragerc
