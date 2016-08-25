@@ -20,6 +20,7 @@ before_install:
 
 # Install packages
 install:
+  - pip install coveralls
   - conda install --yes python=$TRAVIS_PYTHON_VERSION numpy scipy nose
   # Coverage packages are on my binstar channel
   - conda install --yes -c dan_blanchard python-coveralls nose-cov
