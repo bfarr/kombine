@@ -4,11 +4,11 @@ sudo: false
 matrix:
   include:
     - python: "2.7"
-      env: DEPS="numpy=1.9 scipy=0.16" BUILD_DOCS=false
+      env: DEPS="numpy=1.9 scipy=0.16"
     - python: "3.4"
-      env: DEPS="numpy=1.9 scipy=0.16" BUILD_DOCS=false
+      env: DEPS="numpy=1.9 scipy=0.16"
     - python: "3.5"
-      env: DEPS="numpy scipy" BUILD_DOCS=true
+      env: DEPS="numpy scipy"
 
 
 install:
@@ -16,7 +16,6 @@ install:
   - conda config --add channels soft-matter
   - conda create -n testenv --yes $DEPS pip nose setuptools python=$TRAVIS_PYTHON_VERSION
   - source activate testenv
-  - if [ $BUILD_DOCS == true ]; then pip install sphinx_bootstrap_theme; fi
   # for debugging...
   - echo $PATH
   - which python
@@ -31,6 +30,8 @@ before_install:
   - export PATH=/home/travis/mc/bin:$PATH
 
 install:
+  - pip install numpy
+  - pip install scipy
   - pip install nose
   - pip install coverage
   - pip install codecov
