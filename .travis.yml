@@ -6,17 +6,12 @@ matrix:
     - python: "2.7"
       env: DEPS="numpy=1.9 scipy=0.16" BUILD_DOCS=false
     - python: "3.4"
-      env: DEPS="umpy=1.9 scipy=0.16" BUILD_DOCS=false
+      env: DEPS="numpy=1.9 scipy=0.16" BUILD_DOCS=false
     - python: "3.5"
       env: DEPS="numpy scipy" BUILD_DOCS=true
 
 
 install:
-  # See:
-  # https://groups.google.com/a/continuum.io/forum/#!topic/conda/RSFENqovnro
-  # - conda update --yes --no-deps conda
-  # OK, this used to *fix* the build, but now it *breaks* the build.
-  # If you're reading this, good luck out there. I'm not sure what to tell you.
   - conda update --yes conda
   - conda config --add channels soft-matter
   - conda create -n testenv --yes $DEPS pip nose setuptools python=$TRAVIS_PYTHON_VERSION
@@ -42,41 +37,6 @@ install:
 
 script:
   - nosetests --nologcapture -a '!slow' --with-coverage --cover-package kombine
-  - |
-    if [ $BUILD_DOCS == true ]; then
-      cd $TRAVIS_BUILD_DIR/..
-      git clone https://github.com/soft-matter/trackpy-examples.git
-      cd trackpy/doc
-      # this expects the notebooks to be in ../../../trackpy-examples/notebooks/
-      make notebooks
-      make html
-    fi
 
 after_success:
-    - |
-      if [[ $TRAVIS_PULL_REQUEST == false && $TRAVIS_REPO_SLUG == 'soft-matter/trackpy' && $BUILD_DOCS == true && $TRAVIS_BRANCH == 'master' ]]; then
-        echo "Uploading documentation"
-        cd $TRAVIS_BUILD_DIR
-        openssl aes-256-cbc -K $encrypted_23ba5de49536_key -iv $encrypted_23ba5de49536_iv -in soft-matter-docs-deploy.enc -out soft-matter-docs-deploy -d
-        eval `ssh-agent -s`
-        chmod 600 soft-matter-docs-deploy
-        ssh-add soft-matter-docs-deploy
-        git config --global user.email "Travis@nomail"
-        git config --global user.name "Travis"
-        git config --global push.default simple
-        cd ..
-        git clone git@github.com:soft-matter/soft-matter.github.io.git ./doc-repo
-        cd doc-repo/trackpy
-        git checkout --orphan temp_branch
-        git rm -rf ./dev
-        mv $TRAVIS_BUILD_DIR/doc/_build/html ./dev
-        if [ -n "$TRAVIS_TAG" ]; then
-          cp -R dev $TRAVIS_TAG;
-        fi
-        git add -A
-        git commit -m "Docs build of trackpy commit $TRAVIS_COMMIT"
-        git branch -D master
-        git branch -m master
-        git push --set-upstream origin master --force
-      fi
   - coveralls --config_file .coveragerc
