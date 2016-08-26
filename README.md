@@ -1,6 +1,7 @@
 # kombine
 
 **A kernel-density-based, embarrassingly parallel ensemble sampler**
+
 [![Travis CI build status (Linux)](https://travis-ci.org/bfarr/kombine.svg?branch=master)](https://travis-ci.org/bfarr/kombine)
 [![Code Coverage](https://codecov.io/gh/bfarr/kombine/branch/master/graph/badge.svg)](https://codecov.io/gh/bfarr/kombine)
 
