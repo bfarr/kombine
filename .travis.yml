@@ -24,7 +24,7 @@ install:
   - conda update -q conda
   # Useful for debugging any issues with conda
   - conda info -a
-  - deps='numpy scipy nose'
+  - deps='numpy scipy nose coverage'
   - conda create -q -n test-environment --yes $deps "python=$TRAVIS_PYTHON_VERSION"
   - source activate test-environment
   - python setup.py install
