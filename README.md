@@ -1,13 +1,8 @@
 # kombine
 
 **A kernel-density-based, embarrassingly parallel ensemble sampler**
-.. image:: https://travis-ci.org/bfarr/kombine.svg?branch=master
-   :target: https://travis-ci.org/bfarr/kombine
-   :alt: Travis CI build status (Linux)
-
-.. image:: https://codecov.io/gh/bfarr/kombine/branch/master/graph/badge.svg
-   :target: https://codecov.io/gh/bfarr/kombine
-   :alt: Code Coverage
+[![Travis CI build status (Linux)](https://travis-ci.org/bfarr/kombine.svg?branch=master)](https://travis-ci.org/bfarr/kombine)
+[![Code Coverage](https://codecov.io/gh/bfarr/kombine/branch/master/graph/badge.svg)](https://codecov.io/gh/bfarr/kombine)
 
 kombine is an ensemble sampler that uses a clustered
 kernel-density-estimate proposal density, allowing for *massive*
