@@ -59,30 +59,26 @@ cdef double kepler_solve_ta(double n, double e, double t):
 
   return f
 
-cpdef np.ndarray[np.float_t, ndim=2] rv_model(np.ndarray[np.float_t, ndim=1] ts, 
-                                              np.ndarray[np.float_t, ndim=1] Ks,
-                                              np.ndarray[np.float_t, ndim=1] es,
-                                              np.ndarray[np.float_t, ndim=1] omegas,
-                                              np.ndarray[np.float_t, ndim=1] chis,
-                                              np.ndarray[np.float_t, ndim=1] ns):
+cpdef np.ndarray[np.float_t, ndim=1] rv_model(np.ndarray[np.float_t, ndim=1] ts, 
+                                              double K,
+                                              double e,
+                                              double omega,
+                                              double chi,
+                                              double P):
   cdef int i, j
-  cdef int npl=Ks.shape[0], nts=ts.shape[0]
-  cdef double t, K, e, omega, chi, n, t0, f, ecw
-  cdef np.ndarray[np.float_t, ndim=2] rvs = np.zeros((npl, nts))
+  cdef nts=ts.shape[0]
+  cdef double t, t0, f, ecw, n
+  cdef np.ndarray[np.float_t, ndim=1] rvs = np.zeros((nts,))
 
-  for i in range(npl):
-      K=Ks[i]
-      e=es[i]
-      omega=omegas[i]
-      chi=chis[i]
-      n=ns[i]
-      t0 = -chi*2.0*M_PI/n
-      ecw=e*cos(omega)
+  n = 2.0*M_PI/P
 
-      for j in range(nts):
-          t = ts[j]
-          f = kepler_solve_ta(n, e, (t-t0))
+  t0 = -chi*P
+  ecw=e*cos(omega)
 
-          rvs[i,j] = K*(cos(f + omega) + ecw)
+  for j in range(nts):
+      t = ts[j]
+      f = kepler_solve_ta(n, e, (t-t0))
+
+      rvs[j] = K*(cos(f + omega) + ecw)
 
   return rvs
