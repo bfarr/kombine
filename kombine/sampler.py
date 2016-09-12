@@ -584,15 +584,15 @@ class Sampler(object):
             # add any remainder
             remainder = (self._kde_size * num_groups) % size
             if remainder:
-                draws.append(self._kde[(num_groups+kde_start_idx)% self._nkdes](remainder,
-                             space=spaces))
+                draws.append(self._kde[(num_groups+kde_start_idx)% self._nkdes].draw(
+                                remainder, space=spaces))
         else:
             draws = [self._kde[ii % self._nkdes].draw(self._kde_size)
                      for ii in np.arange(num_groups)+kde_start_idx]
             # add any remainder
             remainder = (self._kde_size * num_groups) % size
             if remainder:
-                draws.append(self._kde[(num_groups+kde_start_idx)% self._nkdes](remainder))
+                draws.append(self._kde[(num_groups+kde_start_idx)% self._nkdes].draw(remainder))
         return np.concatenate(draws)
 
     def trigger_update(self, interval=None):
