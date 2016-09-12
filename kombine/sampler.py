@@ -24,22 +24,26 @@ from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 class _GetLnProbWrapper(object):
     """Convenience class for evaluating multiple probability densities at a single point."""
-    def __init__(self, lnpost, kde, *args):
+    def __init__(self, lnpost, kde, p, kde_size, *args):
         self.lnpost = lnpost
         self.kde = kde
+        self.p = p
+        self.kde_size = kde_size
         self.args = args
 
-    def lnprobs(self, p):
+    def lnprobs(self, walker):
         """
-        Evaluate the log probability density of the stored target distribution fuction
-        and KDE at `p`.
+        Evaluate the log probability density of the stored target distribution fuction,
+        KDE, and p at walker number `walker`.
 
-        :param p: Location to evaluate probability densties at.
+        :param walker: Which walker to evaluate.
 
         :returns: ``lnpost(p)``, ``kde(p)``
         """
-        result = self.lnpost(p, *self.args)
-        kde = self.kde(p)
+        pi = self.p[walker,:]
+        kde_idx = int(walker / self.kde_size)
+        result = self.lnpost(pi, *self.args)
+        kde = self.kde[kde_idx](pi)
 
         # allow posterior function to optionally
         # return additional metadata
@@ -85,13 +89,31 @@ class Sampler(object):
         A pre-constructed pool with a map method. If ``None`` a pool will be created using
         :mod:`multiprocessing`.
 
+    :param kde_size: (optional)
+        Maximum sample size for KDE construction.  When the KDE is updated, existing samples are
+        thinned by factors of two until there's enough room for `nwalkers` new samples.  The
+        default is `nwalkers`. If < `nwalkers`, it must be an integer factor of `nwalkers`. In
+        this case, multiple KDEs will be used, with `nwalkers/kde_size` subset of walkers assigned
+        to each KDE.
+
     """
     def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
-                 processes=None, pool=None, args=[]):
+                 processes=None, pool=None, kde_size=None, args=[]):
         self.nwalkers = nwalkers
+        # we'll find it useful to have an array of walker indices
+        self._walkers = np.arange(nwalkers).astype(int)
         self.dim = ndim
-        self._kde = None
-        self._kde_size = self.nwalkers
+        if kde_size is None:
+            kde_size = self.nwalkers
+        self._kde_size = kde_size
+        # figure out the number of needed kdes
+        num_kdes = self.nwalkers / float(self._kde_size)
+        # if need more than 1, make sure it's an integer number
+        if num_kdes > 1 and num_kdes % 1 != 0:
+            raise ValueError("max kde size must be an integer fraction of "
+                "the number of walkers")
+        self._nkdes = max(1, int(num_kdes))
+        self._kde = [None]*self._nkdes
         self.updates = np.array([])
 
         self._get_lnpost = lnpostfn
@@ -129,6 +151,17 @@ class Sampler(object):
         self._last_run_mcmc_result = None
         self._burnin_spaces = None
         self._failed_p = None
+
+    def kde(self, p):
+        """Evaluates the kde at the given p points.
+        
+        :param p: An nwalkers x ndim array.
+
+        :returns:
+            An nwalkers length array of the KDE evaluated at each point.
+        """
+        # map the appropriate kde to the appropriate walkers
+        return np.array([self._kde[ii % self._nkdes](p[ii,:]) for ii in self._walkers])
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                test_steps=16, max_steps=None, verbose=False, callback=None,
@@ -201,8 +234,8 @@ class Sampler(object):
         while step_size <= test_steps:
             # Update the proposal            
             if p0 is not None:
-                self.update_proposal(p0, max_samples=self.nwalkers)
-                lnprop0 = self._kde(p0)
+                self.update_proposal(p0)
+                lnprop0 = self.kde(p0)
             if verbose:
                 print('Updated proposal')
 
@@ -274,7 +307,7 @@ class Sampler(object):
             return p, lnpost, lnprop, blob
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               iterations=1, kde=None, update_interval=None, kde_size=None,
+               iterations=1, kde=None, update_interval=None,
                freeze_transd=False, spaces=None, storechain=True, **kwargs):
         """
         Advance the ensemble `iterations` steps as a generator.
@@ -304,11 +337,6 @@ class Sampler(object):
 
         :param update_interval: (optional)
             Number of steps between proposal updates.
-
-        :param kde_size: (optional)
-            Maximum sample size for KDE construction.  When the KDE is updated, existing samples are
-            thinned by factors of two until there's enough room for `nwalkers` new samples.  The
-            default is `nwalkers`, and must be greater than :math:`\geq``nwalkers` if specified.
 
         :param freeze_transd: (optional)
             If ``True`` when transdimensional sampling, walkers are confined to their parameter
@@ -353,22 +381,20 @@ class Sampler(object):
 
         m = self.pool.map
 
-        if kde_size:
-            self._kde_size = kde_size
-
         # Build a proposal if one doesn't already exist
         if kde is not None:
             self._kde = kde
         elif self._kde is None:
-            self.update_proposal(p, max_samples=self._kde_size, **kwargs)
-            lnprop0 = self._kde(p)
+            self.update_proposal(p, **kwargs)
+            lnprop0 = self.kde(p)
 
         lnpost = lnpost0
         lnprop = lnprop0
         blob = blob0
 
         if lnpost is None or lnprop is None:
-            results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p))
+            results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, p, self._kde_size,
+                             *self._lnpost_args), self._walkers))
             lnpost = np.array([r[0] for r in results]) if lnpost is None else lnpost
             lnprop = np.array([r[1] for r in results]) if lnprop is None else lnprop
 
@@ -407,8 +433,8 @@ class Sampler(object):
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
                 try:
-                    results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde,
-                                                       *self._lnpost_args), p_p))
+                    results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, p_p, self._kde_size,
+                                                       *self._lnpost_args), self._walkers))
 
                     lnpost_p = np.array([r[0] for r in results])
                     lnprop_p = np.array([r[1] for r in results])
@@ -462,8 +488,8 @@ class Sampler(object):
 
                 # Update the proposal at the requested interval
                 if self.trigger_update(update_interval):
-                    self.update_proposal(p, max_samples=self._kde_size, **kwargs)
-                    lnprop = self._kde(p)
+                    self.update_proposal(p, **kwargs)
+                    lnprop = self.kde(p)
 
                 self.iterations += 1
 
@@ -487,22 +513,31 @@ class Sampler(object):
                     self.rollback(self.stored_iterations)
                 raise
 
-    def ln_ev(self, ndraws):
+    def ln_ev(self, ndraws, kde_start_idx=None):
         """Produces a Monte-Carlo estimate of the evidence integral using the
         current propasal.
+
+        If `kde_size` < `nwalkers`, the `ii`th draw will be from the `ii %% kde_size`
+        kde.
 
         :param ndraws: The number of draws to make from the proposal
           for the evidence estimate.
 
+        :param kde_start_idx: (optional) If `kde_size` < `nwalkers`, make the
+          `ii`the draw from the `(ii + kde_start_idx) %% kde_size` kde.
+
         :return: ``(lnZ, dlnZ)``.  Evidence estimate and associated
           uncertainty.
         """
+        if kde_start_idx is None:
+            kde_start_idx = 0
 
-        pts = self.draw(ndraws)
+        pts = self.draw(ndraws, kde_start_idx=kde_start_idx)
 
         m = self.pool.map
 
-        results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), pts))
+        results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, pts, self._kde_size, *self._lnpost_args),
+                         np.arange(ndraws)+kde_start_idx))
         lnpost = np.array([r[0] for r in results])
         lnprop = np.array([r[1] for r in results])
 
@@ -520,12 +555,18 @@ class Sampler(object):
 
         return lnZ, dlnZ
 
-    def draw(self, size, spaces=None):
+    def draw(self, size, kde_start_idx=None, spaces=None):
         """
         Draw `size` samples from the current proposal distribution.
 
+        If `kde_size` < `nwalkers`, the `ii`th draw will be from the `ii %% kde_size`
+        kde.
+
         :param size:
             Number of samples to draw.
+
+        :param kde_start_idx: (optional) If `kde_size` < `nwalkers`, make the
+            `ii`the draw from the `(ii + kde_start_idx) %% kde_size` kde.
 
         :param spaces:
             If not ``None`` while transdimensional sampling, draws are confined to the requested
@@ -533,11 +574,26 @@ class Sampler(object):
 
         :returns: `size` draws from the proposal distribution.
         """
+        if kde_start_idx is None:
+            kde_start_idx = 0
+        num_groups = int(np.floor(size/self._kde_size))
+        draws = []
         if self._transd:
-            draws = self._kde.draw(size, spaces=spaces)
+            draws = [self._kde[ii % self._nkdes].draw(self._kde_size, spaces=spaces)
+                     for ii in np.arange(num_groups)+kde_start_idx]
+            # add any remainder
+            remainder = (self._kde_size * num_groups) % size
+            if remainder:
+                draws.append(self._kde[(num_groups+kde_start_idx)% self._nkdes].draw(
+                                remainder, space=spaces))
         else:
-            draws = self._kde.draw(size)
-        return draws
+            draws = [self._kde[ii % self._nkdes].draw(self._kde_size)
+                     for ii in np.arange(num_groups)+kde_start_idx]
+            # add any remainder
+            remainder = (self._kde_size * num_groups) % size
+            if remainder:
+                draws.append(self._kde[(num_groups+kde_start_idx)% self._nkdes].draw(remainder))
+        return np.concatenate(draws)
 
     def trigger_update(self, interval=None):
         """
@@ -564,29 +620,28 @@ class Sampler(object):
 
         return trigger
 
-    def update_proposal(self, p, max_samples=None, **kwargs):
+    def update_proposal(self, p, **kwargs):
         """
         Update the proposal density with points `p`.
 
         :param p:
             Samples to update the proposal with.
 
-        :param max_samples: (optional)
-            The maximum number of samples to use for constructing or updating the kde.  If a KDE is
-            supplied and adding the samples from it will go over this, old samples are thinned by
-            factors of two until under the limit.
-
         :param kwargs: (optional)
             The rest is passed to the KDE constructor.
         """
         self.updates = np.concatenate((self.updates, [self.iterations]))
 
+        walkers_per_kde = self.nwalkers / self._nkdes
+        idx = np.arange(self._nkdes+1, dtype=int) * self._kde_size 
         if self._transd:
-            self._kde = TransdimensionalKDE(p, pool=self.pool, kde=self._kde,
+            self._kde = [TransdimensionalKDE(p[idx[ii]:idx[ii+1],:], pool=self.pool, kde=self._kde[ii],
                                             max_samples=self._kde_size, **kwargs)
+                         for ii in np.arange(self._nkdes).astype(int)]
         else:
-            self._kde = optimized_kde(p, pool=self.pool, kde=self._kde,
+            self._kde = [optimized_kde(p[idx[ii]:idx[ii+1],:], pool=self.pool, kde=self._kde[ii],
                                       max_samples=self._kde_size, **kwargs)
+                         for ii in np.arange(self._nkdes).astype(int)]
 
     @property
     def failed_p(self):
@@ -781,7 +836,9 @@ class Sampler(object):
 
         if self._kde is not None:
             if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
-                results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p0))
+                results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, p0, self._kde_size,
+                                                   *self._lnpost_args),
+                                 self._walkers))
 
                 if lnpost0 is None:
                     lnpost0 = np.array([r[0] for r in results])
