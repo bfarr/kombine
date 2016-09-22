@@ -474,15 +474,7 @@ class Sampler(object):
                     yield p, lnpost, lnprop
 
             except KeyboardInterrupt:
-                # Close the old pool and open a new one
-                self.pool.close()
-
-                if self.processes == 1:
-                    self.pool = SerialPool()
-                else:
-                    # create a multiprocessing pool
-                    self.pool = Pool(self.processes)
-
+                # Resize arrays to remove allocated but unfilled elements
                 if storechain:
                     self.rollback(self.stored_iterations)
                 raise
