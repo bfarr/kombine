@@ -447,8 +447,13 @@ class Sampler(object):
                         blob = None
                     else:
                         blob = [blob_p[i] if a else blob[i] for i, a in enumerate(acc)]
-
                 self._acceptance[self.iterations, :] = acc
+
+                # Update the proposal at the requested interval
+                if self.trigger_update(update_interval):
+                    self.update_proposal(p, max_samples=self._kde_size, **kwargs)
+                    lnprop = self._kde(p)
+
                 if storechain:
                     # Store stuff
                     self._chain[self.stored_iterations, :, :] = p
@@ -459,12 +464,6 @@ class Sampler(object):
                         self._blobs.append(blob)
 
                     self.stored_iterations += 1
-
-                # Update the proposal at the requested interval
-                if self.trigger_update(update_interval):
-                    self.update_proposal(p, max_samples=self._kde_size, **kwargs)
-                    lnprop = self._kde(p)
-
                 self.iterations += 1
 
                 # create generator for sampled points
