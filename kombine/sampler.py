@@ -92,7 +92,7 @@ class Sampler(object):
         self.dim = ndim
         self._kde = None
         self._kde_size = self.nwalkers
-        self.updates = np.array([])
+        self._updates = []
 
         self._get_lnpost = lnpostfn
         self._lnpost_args = args
@@ -570,7 +570,7 @@ class Sampler(object):
         :param kwargs: (optional)
             The rest is passed to the KDE constructor.
         """
-        self.updates = np.concatenate((self.updates, [self.iterations]))
+        self._updates.append(self.iterations)
 
         if self._transd:
             self._kde = TransdimensionalKDE(p, pool=self.pool, kde=self._kde,
@@ -615,6 +615,13 @@ class Sampler(object):
         return self._lnprop
 
     @property
+    def updates(self):
+        """
+        Step numbers where the proposal density was updated.
+        """
+        return self._updates
+
+    @property
     def acceptance(self):
         """
         Boolean array of ensemble's past acceptances, with shape `(iterations, nwalkers)`.
@@ -637,6 +644,35 @@ class Sampler(object):
         last step.  See :meth:`windowed_acceptance_rate` if you want more control.
         """
         return self.windowed_acceptance_rate()
+
+    @property
+    def autocorrelation_times(self, lookback=None):
+        """
+        An `nwalkers`-long vector of the estimated autocorrelation time of each walker, estimated
+        using the number of step acceptances over the last `lookback` steps.
+
+        This function leverages the convenience that the proposal density doesn't functionally depend
+        on walkers' current locations, which means an accepted step *must* be independent.  This allows
+        for an analytic estimate of the autocorrelation time :math:\tau that depends only on the
+        acceptance rate
+
+        .. math:: \tau = \frac{2}{r_\mathrm{acc}} - 1
+
+        NOTE: This method can only be used if the chain is being stored.
+
+        :param lookback:
+            Number of previous steps to use for the autocorrelation time estimates.  If ``None``,
+            all steps since last proposal update will be used.
+        """
+        if lookback is None:
+            lookback = self.iterations - self.updates[-1]
+
+        # Turn lookback into a negative index to count from the end of the array
+        lookback *= -1
+
+        acc_rates = np.mean(self.acceptance[lookback:], axis=0)
+
+        return 2.0/acc_rates - 1.0
 
     def windowed_acceptance_rate(self, window=None):
         """
