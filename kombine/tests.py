@@ -34,29 +34,32 @@ class MultimodalTestDistribution(object):
         prob = np.sum([multivariate_normal.pdf(x, mean, self._cov) for mean in self._means], axis=0)/self._nmodes
         return prob
 
-    def is_consistent(self, kde, size=1000, kl_thresh=0.01):
+    def kl_divergence(self, kde, size=1000):
         """Compute the KL divergence to see if the distributions are consistent"""
         test_pts = self.draw(size)
 
-        D = entropy(np.exp(kde(test_pts)), self(test_pts))
-        return D < kl_thresh
+        return entropy(np.exp(kde(test_pts)), self(test_pts))
 
     def __call__(self, x):
         return self.pdf(x)
 
 
 # Check the KDE proposals
-def check_kde_estimate(kde, test_dist):
-    assert test_dist.is_consistent(kde)
+def check_kde_estimate(kde, test_dist, kl_thresh=0.02):
+    D = test_dist.kl_divergence(kde)
+    assert D < kl_thresh, \
+        ("KDE is inconsistent with test distribution.  KL divergence {0:g} is above " \
+         "the threshold {1:g}").format(D, kl_thresh)
 
-def check_kde_normalization(kde, thresh=1e-3):
+def check_kde_normalization(kde, thresh=1e-5):
     x = np.linspace(0, 1, 100)
     X, Y = np.meshgrid(x, x)
     positions = np.column_stack([X.ravel(), Y.ravel()])
 
     pdf = np.exp(np.reshape(kde(positions), X.shape))
     prob = np.trapz(np.trapz(pdf, x), x)
-    assert np.abs(1. - prob) < thresh
+    assert np.abs(1. - prob) < thresh, \
+        "KDE not properly normalized.  KDE found to integrate to {:.7f}".format(prob)
 
 def check_kde(kde, test_dist):
     check_kde_normalization(kde)
