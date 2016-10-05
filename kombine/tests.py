@@ -4,9 +4,10 @@
 Unit tests for nose.
 """
 
+from __future__ import division
+
 import numpy as np
 from scipy.stats import multivariate_normal
-from scipy.stats import entropy
 
 from .clustered_kde import KDE
 from .clustered_kde import ClusteredKDE
@@ -18,31 +19,36 @@ from .sampler import Sampler
 
 class MultimodalTestDistribution(object):
     def __init__(self, nmodes=1, ndim=2):
-        self._nmodes = nmodes
-        self._ndim = ndim
+        self.nmodes = nmodes
+        self.ndim = ndim
 
-        dx = 1./(self._nmodes + 1)
-        self._cov = .005*dx*np.eye(self._ndim)
+        dx = 1./(self.nmodes + 1)
+        self.cov = .005*dx*np.eye(self.ndim)
         means = (1.+np.arange(nmodes))*dx
-        self._means = np.column_stack([means for dim in range(self._ndim)])
+        self.means = np.column_stack([means for dim in range(self.ndim)])
 
     def draw(self, mode_size=1000):
-        return np.vstack([np.random.multivariate_normal(mean, self._cov, size=mode_size) for mean in self._means])
+        return np.vstack([multivariate_normal.rvs(mean, self.cov, size=mode_size) for mean in self.means])
 
-    def pdf(self, x):
-        x = np.atleast_2d(x)
-        prob = np.sum([multivariate_normal.pdf(x, mean, self._cov) for mean in self._means], axis=0)/self._nmodes
-        return prob
+    def logpdf(self, x):
+        #x = np.atleast_2d(x)
+
+        log_probs = [multivariate_normal.logpdf(x, mean, self.cov) - np.log(self.nmodes) for mean in self.means]
+        return np.logaddexp.reduce(log_probs)
 
     def kl_divergence(self, kde, size=1000):
         """Compute the KL divergence to see if the distributions are consistent"""
         test_pts = self.draw(size)
 
-        return entropy(np.exp(kde(test_pts)), self(test_pts))
+        logpk = kde(test_pts)
+        logqk = self(test_pts)
+        logpk -= np.logaddexp.reduce(logpk)
+        logqk -= np.logaddexp.reduce(logqk)
+        kl_div = np.sum(np.exp(logpk) * (logpk - logqk))
+        return kl_div
 
     def __call__(self, x):
-        return self.pdf(x)
-
+        return self.logpdf(x)
 
 # Check the KDE proposals
 def check_kde_estimate(kde, test_dist, kl_thresh=0.02):
@@ -87,3 +93,65 @@ def test_optimized_kde():
     check_kde(kde, test_dist)
 
 # Check the sampler
+
+log_threshold = -3
+std_threshold = 3
+
+class TestSampler:
+    def setUp(self):
+        self.nwalkers = 512
+        self.ndim = 5
+        self.nmodes = 2
+        self.nsteps = 100
+        self.update_interval = 10
+        self.split = 0.5
+
+        self.target = MultimodalTestDistribution(self.nmodes, self.ndim)
+        self.p0 = np.random.uniform(-1, 1, size=(self.nwalkers, self.ndim))
+
+    def check_sampling(self, nsteps=None, p0=None, update_interval=None):
+        if nsteps is None:
+            nsteps = self.nsteps
+        if p0 is None:
+            p0 = self.p0
+        if update_interval is None:
+            update_interval = self.update_interval
+
+        for i in self.sampler.sample(p0, iterations=nsteps, update_interval=update_interval):
+            pass
+
+        p = self.sampler.chain[-1]
+        mode_sel = [np.all(p < self.split, axis=1), np.all(p > self.split, axis=1)]
+        count_std = self.nwalkers * 1/self.nmodes * (1 - 1/self.nmodes)
+
+        for mean, sel in zip(self.target.means, mode_sel):
+            assert np.abs(np.count_nonzero(sel) - self.nwalkers/self.nmodes) < std_threshold * count_std
+            assert np.all((np.mean(p[sel], axis=0) - mean) ** 2 < 10. ** log_threshold)
+            assert np.all((np.cov(p[sel], rowvar=0) - self.target.cov) ** 2 < 10. ** log_threshold)
+
+    def test_sampler_serially(self):
+        self.sampler = Sampler(self.nwalkers, self.ndim, self.target, processes=1)
+        self.check_sampling()
+
+    def test_sampler_parallelly(self):
+        self.sampler = Sampler(self.nwalkers, self.ndim, self.target, processes=4)
+        self.check_sampling()
+
+    def test_burnin(self):
+        self.sampler = Sampler(self.nwalkers, self.ndim, self.target)
+        self.sampler.burnin(self.p0)
+        self.check_sampling(nsteps=0)
+
+    def test_blobs(self):
+        blobby_target = lambda p: (self.target(p), np.random.randn())
+        self.sampler = Sampler(self.nwalkers, self.ndim, blobby_target, processes=1)
+        self.check_sampling()
+
+        blobs = np.array(self.sampler.blobs)
+        assert (self.sampler.chain.shape == (self.nsteps, self.nwalkers, self.ndim)
+                and blobs.shape == (self.nsteps, self.nwalkers)), \
+                    "You broke the blob!"
+
+        # Make sure some blobs were updated
+        assert len(np.unique(blobs)) > self.nwalkers, \
+            "blobs repeated: {} != {} {}".format(len(np.unique(blobs)), len(blobs), blobs.shape)
