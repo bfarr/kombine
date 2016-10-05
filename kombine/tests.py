@@ -47,6 +47,11 @@ class MultimodalTestDistribution(object):
         kl_div = np.sum(np.exp(logpk) * (logpk - logqk))
         return kl_div
 
+    @property
+    def ln_marginal_prob(self):
+        # This is a normalized distribution
+        return 0.0
+
     def __call__(self, x):
         return self.logpdf(x)
 
@@ -99,10 +104,10 @@ std_threshold = 3
 
 class TestSampler:
     def setUp(self):
-        self.nwalkers = 512
-        self.ndim = 5
+        self.nwalkers = 128
+        self.ndim = 3
         self.nmodes = 2
-        self.nsteps = 100
+        self.nsteps = 50
         self.update_interval = 10
         self.split = 0.5
 
@@ -128,6 +133,10 @@ class TestSampler:
             assert np.abs(np.count_nonzero(sel) - self.nwalkers/self.nmodes) < std_threshold * count_std
             assert np.all((np.mean(p[sel], axis=0) - mean) ** 2 < 10. ** log_threshold)
             assert np.all((np.cov(p[sel], rowvar=0) - self.target.cov) ** 2 < 10. ** log_threshold)
+
+        # Check marginal likelihood estimate
+        lnZ, dlnZ = self.sampler.ln_ev(self.nwalkers)
+        assert np.abs(lnZ - self.target.ln_marginal_prob) < std_threshold * dlnZ
 
     def test_sampler_serially(self):
         self.sampler = Sampler(self.nwalkers, self.ndim, self.target, processes=1)
