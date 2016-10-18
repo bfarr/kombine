@@ -6,7 +6,7 @@ A kernel-density-based, embarrassingly parallel ensemble sampler.
 
 from __future__ import (division, print_function, absolute_import, unicode_literals)
 
-from .utils import mp_safe_blas, disable_openblas_threading
+from .utils import mp_safe_blas, disable_openblas_threading, gelman_rubin
 
 if not mp_safe_blas():
     from multiprocessing.pool import ThreadPool as Pool
@@ -130,13 +130,15 @@ class Sampler(object):
         self._burnin_spaces = None
         self._failed_p = None
 
-    def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               test_steps=16, max_steps=None, verbose=False, callback=None,
-               **kwargs):
+    def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None, callback=None,
+               target_acts=16, r_cdf_thresh=0.95, verbose=False, max_steps=None, **kwargs):
         """
-        Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
-        splitting acceptances in half and checking for statistical consistency.  This isn't
-        guaranteed to return a fully burned-in ensemble, but usually does.
+        Evolve the ensemble until it is burned in and each walker has collected roughly
+        `target_acts` independent samples.  While burning in the proposal over an increasing
+        interval that is scaled by the autocorrelation time. The burnin is considered complete
+        when the Gelman--Rubin statistics for all parameters, calculated over the last
+        2*`target_acts`, are below the `r_cdf_thresh` percentile. This method is sufficient
+        for burning in on many distributions, but your milage may vary.
 
         :param p0: (optional)
             A list of the initial walker positions.  It should have the shape `(nwalkers, ndim)`.
@@ -154,9 +156,16 @@ class Sampler(object):
         :param blob0: (optional)
             The list of blob data for walkers at positions `p0`.
 
-        :param test_steps: (optional)
-            The (rough) number of accepted steps over which to check for acceptance rate
-            consistency. If you find burnin repeatedly ending prematurely try increasing this.
+        :param callback: (optional)
+            A callback function that accepts a :class:`Sampler` argument to be called periodically
+            during burnin.
+
+        :param target_acts: (optional)
+            The (rough) number of autocorrelation times to be collected from each walker.
+
+        :param r_cdf_thresh: (optional)
+            The critical level below which all Gelman-Rubin statistic percentiles should be
+            to consider the ensemble burned in.
 
         :param max_steps: (optional)
             An absolute maximum number of steps to take, in case burnin is too painful.
@@ -198,17 +207,17 @@ class Sampler(object):
             max_iter = start + max_steps
 
         step_size = 2
-        while step_size <= test_steps:
-            # Update the proposal            
+        while step_size <= target_acts:
+            # Update the proposal
             if p0 is not None:
                 self.update_proposal(p0, max_samples=self.nwalkers)
                 lnprop0 = self._kde(p0)
             if verbose:
-                print('Updated proposal')
+                print('updated proposal at iteration {}'.format(self.iterations))
 
             # Take one step to estimate acceptance rate
-            test_interval = 1
-            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
+            interval = 1
+            results = self.run_mcmc(interval, p0, lnpost0, lnprop0, blob0,
                                     freeze_transd=freeze_transd, spaces=self._burnin_spaces,
                                     **kwargs)
             try:
@@ -222,22 +231,23 @@ class Sampler(object):
             last_acc_rate = max(np.mean(self.acceptance[-1]), 0.01)
 
             # Estimate ACT based on acceptance
-            act = int(np.ceil(2.0/last_acc_rate - 1.0))
+            act = np.ceil(2.0/last_acc_rate - 1.0)
 
             if verbose:
-                print('Single-step acceptance rate is ', last_acc_rate)
-                print('Producing ACT of ', act)
+                print('mean acceptance of the last step {}'.format(self.acceptance_fraction[-1]))
+                print('corresponding to an ACT of {}'.format(act))
+
+            act = int(act)
 
             # Use the ACT to set the new test interval, but avoid
-            # overstepping a specified max.  We throw away the first
-            # 2*act worth of steps as an initial burnin when comparing
-            # acceptance rates
-            test_interval = min((step_size+2)*act, max_iter - self.iterations)
+            # overstepping a specified max.
+            interval = min(step_size * act, max_iter - self.iterations)
 
             # Make sure we're taking at least one step
-            test_interval = max(test_interval, 1)
+            interval = max(interval, 1)
 
-            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
+            # Evolve the ensemble keeping the proposal fixed
+            results = self.run_mcmc(interval, p, lnpost, lnprop, blob,
                                     freeze_transd=freeze_transd, spaces=self._burnin_spaces,
                                     **kwargs)
             try:
@@ -251,22 +261,32 @@ class Sampler(object):
 
             # Quit if we hit the max
             if self.iterations >= max_iter:
-                print("Burnin hit {} iterations before completing.".format(max_iter))
+                print("burnin hit {} iterations before completing.".format(max_iter))
                 break
 
-            # Only check for consistency past the burn-in stage of 2*act
-            if self.consistent_acceptance_rate(window_size=step_size*act):
+            # Compute R-statistic over the last `2*target_acts` ACTs
+            Rs, R_cdfs = gelman_rubin(self.chain[-2*act*target_acts:], return_cdf=True)
+
+            # If below burnin threshold, double the number of ACTs between updates
+            if max(R_cdfs) < r_cdf_thresh:
                 if verbose:
-                    print('Acceptance rate constant over ', step_size, ' ACTs')
+                    print('R-stats were good over the last {} ACTs.'.format(step_size))
                 step_size *= 2
             else:
                 if verbose:
-                    print('Acceptance rate varies, trying again')
+                    print('largest R-stat is {} ({}-th percentile).'.format(max(Rs),
+                                                                            int(100*max(R_cdfs))))
+                    print('burnin continues...')
 
             if verbose:
                 print('') # Newline
 
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
+
+        if verbose:
+            print('ensemble burned in after {} steps.'.format(self.iterations))
+            print('R-statistics over the last {} ACTs:'.format(2*target_acts))
+            print(Rs)
 
         if blob is None:
             return p, lnpost, lnprop
