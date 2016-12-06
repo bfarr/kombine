@@ -87,6 +87,7 @@ class Sampler(object):
         self._kde = None
         self._kde_size = self.nwalkers
         self._updates = []
+        self._burnin_length = None
 
         self._get_lnpost = lnpostfn
         self._lnpost_args = args
@@ -270,6 +271,8 @@ class Sampler(object):
                 print('') # Newline
 
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
+
+        self._burnin_length = self.updates[-1]
 
         if blob is None:
             return p, lnpost, lnprop
@@ -832,3 +835,27 @@ class Sampler(object):
 
         return results
 
+    @property
+    def burnin_length(self):
+        return self._burnin_length
+
+    def get_samples(self, burnin_length=None):
+        """
+        Extract the independent samples collected after burnin.
+        If :meth:`burnin` was not used, and ``burnin_length`` is
+        ``None``, the iteration of the last proposal update will
+        be used.
+
+        :param burnin_length: (optional)
+            The step after which to extract samples from.
+
+        :returns: An `(nsamples, ndim)` array of independent samples.
+        """
+        if burnin_length is None:
+            burnin_length = self.burnin_length
+        if burnin_length is None:
+            burnin_length = self.updates[-1]
+        ACTs = np.ceil(self.autocorrelation_times).astype(int)
+        samples = [self.chain[burnin_length::ACT, walker]
+                   for walker, ACT in zip(range(self.nwalkers), ACTs)]
+        return np.vstack(samples)
