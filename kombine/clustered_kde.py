@@ -244,7 +244,7 @@ class KDE(object):
         # store transformation variables for drawing random values
         alphas = abs(data).max(axis=0)
         ms = 1./alphas
-        m_i, m_j = numpy.meshgrid(ms, ms)
+        m_i, m_j = np.meshgrid(ms, ms)
         ms = m_i * m_j
         self._draw_cov = ms * self._kernel_cov
         self._scale_fac = alphas
