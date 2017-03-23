@@ -837,7 +837,15 @@ class Sampler(object):
 
     @property
     def burnin_length(self):
-        return self._burnin_length
+        """
+        If :meth:`burnin` was not used, and ``burnin_length`` is
+        ``None``, the iteration of the last proposal update will
+        be used.
+        """
+        if self._burnin_length is None:
+            return self.updates[-1]
+        else:
+            return self._burnin_length
 
     def get_samples(self, burnin_length=None):
         """
@@ -853,8 +861,6 @@ class Sampler(object):
         """
         if burnin_length is None:
             burnin_length = self.burnin_length
-        if burnin_length is None:
-            burnin_length = self.updates[-1]
         ACTs = np.ceil(self.autocorrelation_times).astype(int)
         samples = [self.chain[burnin_length::ACT, walker]
                    for walker, ACT in zip(range(self.nwalkers), ACTs)]
