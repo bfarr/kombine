@@ -242,7 +242,7 @@ class KDE(object):
         self._set_bandwidth()
 
         # store transformation variables for drawing random values
-        alphas = abs(data).max(axis=0)
+        alphas = np.std(data, axis=0)
         ms = 1./alphas
         m_i, m_j = np.meshgrid(ms, ms)
         ms = m_i * m_j
