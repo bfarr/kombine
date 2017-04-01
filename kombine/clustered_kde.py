@@ -241,6 +241,14 @@ class KDE(object):
 
         self._set_bandwidth()
 
+        # store transformation variables for drawing random values
+        alphas = np.std(data, axis=0)
+        ms = 1./alphas
+        m_i, m_j = np.meshgrid(ms, ms)
+        ms = m_i * m_j
+        self._draw_cov = ms * self._kernel_cov
+        self._scale_fac = alphas
+
     def __enter__(self):
         return self
 
@@ -276,7 +284,8 @@ class KDE(object):
             return []
 
         # Draw vanilla samples from a zero-mean multivariate Gaussian
-        draws = np.random.multivariate_normal(np.zeros(self.ndim), self._kernel_cov, size=size)
+        draws = self._scale_fac * np.random.multivariate_normal(np.zeros(self.ndim),
+                                                                self._draw_cov, size=size)
 
         # Pick N random kernels as means
         kernels = np.random.randint(0, self.size, size)
