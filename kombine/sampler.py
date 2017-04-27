@@ -96,6 +96,7 @@ class Sampler(object):
 
         self.processes = processes
 
+        self._managing_pool = False
         if pool is not None:
             self.pool = pool
 
@@ -103,6 +104,8 @@ class Sampler(object):
             self.pool = SerialPool()
 
         else:
+            self._managing_pool = True
+
             # create a multiprocessing pool
             self.pool = Pool(self.processes)
 
@@ -470,6 +473,12 @@ class Sampler(object):
                 # Resize arrays to remove allocated but unfilled elements
                 if storechain:
                     self.rollback(self.stored_iterations)
+
+                # If the sampler is handling the pool, reset it automatically
+                if self._managing_pool:
+                    self.pool.close()
+                    self.pool = Pool(self.processes)
+
                 raise
 
     def ln_ev(self, ndraws):
