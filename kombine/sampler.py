@@ -6,15 +6,9 @@ A kernel-density-based, embarrassingly parallel ensemble sampler.
 
 from __future__ import (division, print_function, absolute_import, unicode_literals)
 
-from .utils import mp_safe_blas, disable_openblas_threading
-
-if not mp_safe_blas():
-    from multiprocessing.pool import ThreadPool as Pool
-else:
-    disable_openblas_threading()
-    from .interruptible_pool import Pool
-
+from .interruptible_pool import Pool
 from .serialpool import SerialPool
+
 import numpy as np
 import numpy.ma as ma
 
@@ -93,6 +87,7 @@ class Sampler(object):
         self._kde = None
         self._kde_size = self.nwalkers
         self._updates = []
+        self._burnin_length = None
 
         self._get_lnpost = lnpostfn
         self._lnpost_args = args
@@ -102,6 +97,7 @@ class Sampler(object):
 
         self.processes = processes
 
+        self._managing_pool = False
         if pool is not None:
             self.pool = pool
 
@@ -109,6 +105,8 @@ class Sampler(object):
             self.pool = SerialPool()
 
         else:
+            self._managing_pool = True
+
             # create a multiprocessing pool
             self.pool = Pool(self.processes)
 
@@ -131,8 +129,8 @@ class Sampler(object):
         self._failed_p = None
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               test_steps=16, max_steps=None, verbose=False, callback=None,
-               **kwargs):
+               test_steps=16, critical_pval=0.05, max_steps=None,
+               verbose=False, callback=None, **kwargs):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
         splitting acceptances in half and checking for statistical consistency.  This isn't
@@ -157,6 +155,12 @@ class Sampler(object):
         :param test_steps: (optional)
             The (rough) number of accepted steps over which to check for acceptance rate
             consistency. If you find burnin repeatedly ending prematurely try increasing this.
+
+        :param critical_pval: (optional)
+            The critial p-value for considering the acceptance distribution
+            consistent.  If the calculated p-value is over this, then the acceptance rate
+            is considered to be stationary.  Lower this if you want burnin criteria to be
+            less strict.
 
         :param max_steps: (optional)
             An absolute maximum number of steps to take, in case burnin is too painful.
@@ -199,7 +203,7 @@ class Sampler(object):
 
         step_size = 2
         while step_size <= test_steps:
-            # Update the proposal            
+            # Update the proposal
             if p0 is not None:
                 self.update_proposal(p0, max_samples=self.nwalkers)
                 lnprop0 = self._kde(p0)
@@ -255,7 +259,7 @@ class Sampler(object):
                 break
 
             # Only check for consistency past the burn-in stage of 2*act
-            if self.consistent_acceptance_rate(window_size=step_size*act):
+            if self.consistent_acceptance_rate(window_size=step_size*act, critical_pval=critical_pval):
                 if verbose:
                     print('Acceptance rate constant over ', step_size, ' ACTs')
                 step_size *= 2
@@ -267,6 +271,8 @@ class Sampler(object):
                 print('') # Newline
 
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
+
+        self._burnin_length = self.updates[-1]
 
         if blob is None:
             return p, lnpost, lnprop
@@ -476,6 +482,12 @@ class Sampler(object):
                 # Resize arrays to remove allocated but unfilled elements
                 if storechain:
                     self.rollback(self.stored_iterations)
+
+                # If the sampler is handling the pool, reset it automatically
+                if self._managing_pool:
+                    self.pool.close()
+                    self.pool = Pool(self.processes)
+
                 raise
 
     def ln_ev(self, ndraws):
@@ -823,3 +835,33 @@ class Sampler(object):
 
         return results
 
+    @property
+    def burnin_length(self):
+        """
+        If :meth:`burnin` was not used, and ``burnin_length`` is
+        ``None``, the iteration of the last proposal update will
+        be used.
+        """
+        if self._burnin_length is None:
+            return self.updates[-1]
+        else:
+            return self._burnin_length
+
+    def get_samples(self, burnin_length=None):
+        """
+        Extract the independent samples collected after burnin.
+        If :meth:`burnin` was not used, and ``burnin_length`` is
+        ``None``, the iteration of the last proposal update will
+        be used.
+
+        :param burnin_length: (optional)
+            The step after which to extract samples from.
+
+        :returns: An `(nsamples, ndim)` array of independent samples.
+        """
+        if burnin_length is None:
+            burnin_length = self.burnin_length
+        ACTs = np.ceil(self.autocorrelation_times).astype(int)
+        samples = [self.chain[burnin_length::ACT, walker]
+                   for walker, ACT in zip(range(self.nwalkers), ACTs)]
+        return np.vstack(samples)
