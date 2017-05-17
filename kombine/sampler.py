@@ -128,8 +128,8 @@ class Sampler(object):
         self._failed_p = None
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               test_steps=16, max_steps=None, verbose=False, callback=None,
-               **kwargs):
+               test_steps=16, critical_pval=0.05, max_steps=None,
+               verbose=False, callback=None, **kwargs):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
         splitting acceptances in half and checking for statistical consistency.  This isn't
@@ -154,6 +154,12 @@ class Sampler(object):
         :param test_steps: (optional)
             The (rough) number of accepted steps over which to check for acceptance rate
             consistency. If you find burnin repeatedly ending prematurely try increasing this.
+
+        :param critical_pval: (optional)
+            The critial p-value for considering the acceptance distribution
+            consistent.  If the calculated p-value is over this, then the acceptance rate
+            is considered to be stationary.  Lower this if you want burnin criteria to be
+            less strict.
 
         :param max_steps: (optional)
             An absolute maximum number of steps to take, in case burnin is too painful.
@@ -196,7 +202,7 @@ class Sampler(object):
 
         step_size = 2
         while step_size <= test_steps:
-            # Update the proposal            
+            # Update the proposal
             if p0 is not None:
                 self.update_proposal(p0, max_samples=self.nwalkers)
                 lnprop0 = self._kde(p0)
@@ -252,7 +258,7 @@ class Sampler(object):
                 break
 
             # Only check for consistency past the burn-in stage of 2*act
-            if self.consistent_acceptance_rate(window_size=step_size*act):
+            if self.consistent_acceptance_rate(window_size=step_size*act, critical_pval=critical_pval):
                 if verbose:
                     print('Acceptance rate constant over ', step_size, ' ACTs')
                 step_size *= 2
