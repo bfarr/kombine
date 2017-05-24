@@ -74,7 +74,7 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
     best_kde = None
 
     k = 1
-    while True:
+    while 1:
         try:
             kde = ClusteredKDE(data, k, **kwargs)
             bic = kde.bic(pool=pool)

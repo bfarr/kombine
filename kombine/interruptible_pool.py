@@ -63,7 +63,7 @@ class Pool(MPPool):
         # KeyboardInterrupts without a timeout
         r = self.map_async(func, items, chunksize)
 
-        while True:
+        while 1:
             try:
                 return r.get(self._wait_timeout)
             except TimeoutError:
