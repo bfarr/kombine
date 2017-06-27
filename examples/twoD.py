@@ -5,9 +5,13 @@ A 2D example.
 import kombine
 
 import numpy as np
-from scipy.misc import imread
 from scipy.ndimage.filters import median_filter
 from scipy.interpolate import RectBivariateSpline
+
+try:
+    from scipy.misc import imread
+except ImportError:
+    print("This example uses scipy.misc.imread, which depends on Pillow (`pip install pillow`)")
 
 from matplotlib import animation as mpl_animation
 
@@ -83,8 +87,8 @@ p = lnprob.prior_draw(nwalkers)
 p, prob, q = sampler.run_mcmc(200, p)
 
 if triangle is None:
-    print "Get triangle.py for some awesome corner plots!"
-    print "https://github.com/dfm/triangle.py"
+    print("Get triangle.py for some awesome corner plots!")
+    print("https://github.com/dfm/triangle.py")
 
 else:
     triangle.corner(p)
@@ -92,8 +96,8 @@ else:
     fig.savefig("triangle.png")
 
 if prism is None:
-    print "Get prism and some popcorn for a sweet movie!"
-    print "https://github.com/bfarr/prism"
+    print("Get prism and some popcorn for a sweet movie!")
+    print("https://github.com/bfarr/prism")
 
 else:
     # Animate the ensemble's progress
