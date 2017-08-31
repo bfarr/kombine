@@ -81,11 +81,13 @@ class Sampler(object):
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
-                 processes=None, pool=None, args=[]):
+                 processes=None, pool=None, kde_size=None, args=[]):
         self.nwalkers = nwalkers
         self.dim = ndim
         self._kde = None
-        self._kde_size = self.nwalkers
+
+        self._kde_size = 2*self.nwalkers if kde_size is None else kde_size
+
         self._updates = []
         self._burnin_length = None
 
@@ -223,12 +225,13 @@ class Sampler(object):
 
             # Use the fraction of acceptances in the last step to estimate acceptance rate
             #   Bottom out at 1% if acceptances are really bad
-            last_acc_rate = max(np.mean(self.acceptance[-1]), 0.01)
+            last_acc_rate = max(np.mean(self.acceptance[-1]), 0.1)
 
             # Estimate ACT based on acceptance
             act = int(np.ceil(2.0/last_acc_rate - 1.0))
 
             if verbose:
+                print('Number of steps taken is ', self.iterations)
                 print('Single-step acceptance rate is ', last_acc_rate)
                 print('Producing ACT of ', act)
 
