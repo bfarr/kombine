@@ -2,3 +2,4 @@
 - `Will Farr (University of Birmingham) <https://github.com/farr>`_
 - `Douglas Rudd (UChicago) <https://github.com/drudd>`_
 - `Adrian Price-Whelan (Columbia) <https://github.com/adrn>`_
+- `Duncan Macleod (Cardiff University) <https://github.com/duncanmmacleod>`_
