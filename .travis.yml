@@ -24,10 +24,12 @@ install:
   - conda update -q conda
   # Useful for debugging any issues with conda
   - conda info -a
-  - deps='numpy scipy nose coverage'
-  - conda create -q -n test-environment --yes $deps "python=$TRAVIS_PYTHON_VERSION"
+  - conda create -q -n test-environment --yes "python=$TRAVIS_PYTHON_VERSION"
   - source activate test-environment
   - python setup.py install
+
+before_script:
+  - pip install nose coverage
 
 script:
   - nosetests --nologcapture -a '!slow' --with-coverage --cover-package kombine
