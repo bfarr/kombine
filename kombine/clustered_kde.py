@@ -8,9 +8,12 @@ from __future__ import (division, print_function, absolute_import, unicode_liter
 
 import numpy as np
 import numpy.ma as ma
-from scipy.misc import logsumexp
 from scipy import linalg as la
 from scipy.cluster.vq import kmeans, vq
+try:
+    from scipy.special import logsumexp
+except ImportError:  # scipy < 1.0.0
+    from scipy.misc import logsumexp
 
 # Avoid log(0) warnings when weights go to 0
 np.seterr(divide='ignore')
