@@ -826,6 +826,11 @@ class Sampler(object):
                     lnpost0 = np.array([r[0] for r in results])
                 if lnprop0 is None:
                     lnprop0 = np.array([r[1] for r in results])
+                if blob0 is None:
+                    try:
+                        blob0 = [r[2] for r in results]
+                    except IndexError:
+                        blob0 = None
 
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
             pass
