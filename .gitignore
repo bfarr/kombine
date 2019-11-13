@@ -8,6 +8,7 @@ build
 eggs
 dist
 *.pyc
+.idea/
 notebooks/
 .ipynb_checkpoints/
 env/
