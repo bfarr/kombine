@@ -887,7 +887,7 @@ class Sampler(object):
 
             nacc = (
                 self.nwalkers
-                * self.acceptance_fraction[window_start : self.iterations]
+                * self.acceptance_fraction[window_start: self.iterations]
             )
             expected_freqs = last_acc_rate * self.nwalkers * np.ones_like(nacc)
 

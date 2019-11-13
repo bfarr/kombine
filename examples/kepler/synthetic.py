@@ -13,7 +13,7 @@ class DataGenerator(object):
         self, params, tsundowns=None, cadences=None, tstarts=None, tends=None
     ):
         """Initialize a data generator for the given system
-        parameters.  
+        parameters.
 
         :param params: Parameters describing the system in question.
 

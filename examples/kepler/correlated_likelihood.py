@@ -7,9 +7,8 @@ def generate_covariance(ts, sigma, tau):
 
     r"""Generates a covariance matrix according to an
     squared-exponential autocovariance
-    
+
     .. math::
-    
       \left\langle x_i x_j \right\rangle = \sigma_0^2 \delta_{ij} + \sigma^2
       \exp\left[ - \frac{\left| t_i - t_j\right|^2}{2 \tau^2} \right]
     """
