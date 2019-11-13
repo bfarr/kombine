@@ -5,6 +5,8 @@ python:
   - "3.4"
   - "3.5"
   - "3.6"
+  - "3.7"
+  - "3.8"
 
 before_install:
   - pip install --upgrade pip
@@ -14,7 +16,6 @@ install:
 
 before_script:
   - python -m pip install nose coverage codecov flake8
-  - python -m pip install numpy scipy pillow
 
 script:
   - flake8 .
