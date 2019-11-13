@@ -12,9 +12,6 @@ from scipy.stats import multivariate_normal
 from .clustered_kde import KDE
 from .clustered_kde import ClusteredKDE
 from .clustered_kde import optimized_kde
-
-from .clustered_kde import TransdimensionalKDE
-
 from .sampler import Sampler
 
 
@@ -46,7 +43,8 @@ class MultimodalTestDistribution(object):
         return np.logaddexp.reduce(log_probs)
 
     def kl_divergence(self, kde, size=1000):
-        """Compute the KL divergence to see if the distributions are consistent"""
+        r"""Compute the KL divergence to see if the distributions are
+        consistent"""
         test_pts = self.draw(size)
 
         logpk = kde(test_pts)
@@ -69,8 +67,8 @@ class MultimodalTestDistribution(object):
 def check_kde_estimate(kde, test_dist, kl_thresh=0.02):
     D = test_dist.kl_divergence(kde)
     assert D < kl_thresh, (
-        "KDE is inconsistent with test distribution.  KL divergence {0:g} is above "
-        "the threshold {1:g}"
+        "KDE is inconsistent with test distribution.  KL divergence {0:g} "
+        "is above the threshold {1:g}"
     ).format(D, kl_thresh)
 
 
@@ -124,6 +122,7 @@ std_threshold = 3
 
 
 class TestSampler:
+
     def setUp(self):
         self.nwalkers = 128
         self.ndim = 3
@@ -191,10 +190,12 @@ class TestSampler:
         self.sampler.burnin(self.p0)
         self.check_sampling(nsteps=0)
 
+    def blobby_target(self, p):
+        return self.target(p), np.random.rand()
+
     def test_blobs(self):
-        blobby_target = lambda p: (self.target(p), np.random.randn())
         self.sampler = Sampler(
-            self.nwalkers, self.ndim, blobby_target, processes=1
+            self.nwalkers, self.ndim, self.blobby_target, processes=1
         )
         self.check_sampling()
 

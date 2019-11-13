@@ -18,7 +18,7 @@ from multiprocessing import TimeoutError
 
 
 def _initializer_wrapper(initializer, *args):
-    """
+    r"""
     Ignore SIGINT. During typical keyboard interrupts, the parent does the
     killing.
     """
@@ -28,9 +28,9 @@ def _initializer_wrapper(initializer, *args):
 
 
 class Pool(MPPool):
-    """
-    A modified :class:`multiprocessing.pool.Pool` that handles :exc:`KeyboardInterrupts` in the
-    :func:`map` method more gracefully.
+    r"""
+    A modified :class:`multiprocessing.pool.Pool` that handles :exc:
+    `KeyboardInterrupts` in the :func:`map` method more gracefully.
 
     :param processes: (optional)
         The number of processes to use (defaults to number of CPUs).
@@ -56,7 +56,7 @@ class Pool(MPPool):
         )
 
     def map(self, func, items, chunksize=None):
-        """
+        r"""
         A replacement for :func:`map` that handles :exc:`KeyboardInterrupt`.
 
         :param func:

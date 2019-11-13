@@ -14,7 +14,7 @@
 
 import sys
 import os
-import shlex
+from kombine import __version__
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -59,8 +59,6 @@ author = u"Ben Farr and contributors"
 
 # Add kombine's directory to the path and import the version
 sys.path.insert(0, os.path.abspath(".."))
-import kombine
-from kombine import __version__
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -136,7 +134,9 @@ html_theme_options = {
 #    'header_inverse': True,
 #    'relbar_inverse': True,
 #    'googlewebfont': True,
-#    'googlewebfont_url': 'http://fonts.googleapis.com/css?family=Dosis|Oswald:400,700|Roboto+Condensed|Share+Tech+Mono|Megrim',
+#    'googlewebfont_url':
+#    'http://fonts.googleapis.com/css?family=Dosis|Oswald:400,700|
+#    Roboto+Condensed|Share+Tech+Mono|Megrim',
 #    'googlewebfont_style': "font-family: 'Megrim', cursive",
 # }
 
@@ -236,13 +236,13 @@ htmlhelp_basename = "kombinedoc"
 
 latex_elements = {
     # The paper size ('letterpaper' or 'a4paper').
-    #'papersize': 'letterpaper',
+    # 'papersize': 'letterpaper',
     # The font size ('10pt', '11pt' or '12pt').
-    #'pointsize': '10pt',
+    # 'pointsize': '10pt',
     # Additional stuff for the LaTeX preamble.
-    #'preamble': '',
+    # 'preamble': '',
     # Latex figure (float) alignment
-    #'figure_align': 'htbp',
+    # 'figure_align': 'htbp',
 }
 
 # Grouping the document tree into LaTeX files. List of tuples

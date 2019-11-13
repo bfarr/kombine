@@ -1,28 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import warnings
-import textwrap
-
 import numpy as np
-import scipy
-
 from scipy.stats.distributions import f
 
 
 def gelman_rubin(chains, return_cdf=False):
     """
     Compute the Gelman-Rubin R-statistic from an ensemble of chains.  `chains`
-    is expected to have shape `(nsteps, nchains)` if samples are one dimensional,
-    or `(nsteps, nchains, ndim)` if multidimensional.  For multidimensional samples
-    R-statistics will be computed for each dimension.
+    is expected to have shape `(nsteps, nchains)` if samples are one
+    dimensional, or `(nsteps, nchains, ndim)` if multidimensional.  For
+    multidimensional samples R-statistics will be computed for each dimension.
 
     :param chains:
         An `(nsteps, nchains)` or `(nsteps, nchains, ndim)`-shaped array.
 
     :param return_cdf: (optional)
-        If ``True``, the CDF of the R-statistic(s), assuming an F-distribution, are
-        returned in addition to the R-statistic(s).
+        If ``True``, the CDF of the R-statistic(s), assuming an F-distribution,
+         are returned in addition to the R-statistic(s).
     """
     if len(chains.shape) > 2:
         results = [
@@ -37,7 +32,6 @@ def gelman_rubin(chains, return_cdf=False):
     nchains, nsteps = chains.shape[1], chains.shape[0]
 
     chain_means = np.mean(chains, axis=0)
-    chain_vars = np.var(chains, axis=0)
 
     # between-chain variance
     interchain_var = np.sum((chain_means - np.mean(chains)) ** 2) / (

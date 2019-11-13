@@ -1,9 +1,6 @@
 import numpy as np
-import numpy.linalg as nl
-import numpy.random as nr
 import rv_model as rv
 import scipy.linalg as sl
-import scipy.stats as ss
 
 
 def generate_covariance(ts, sigma, tau):
@@ -13,10 +10,9 @@ def generate_covariance(ts, sigma, tau):
     
     .. math::
     
-      \left\langle x_i x_j \right\rangle = \sigma_0^2 \delta_{ij} + \sigma^2 \exp\left[ - \frac{\left| t_i - t_j\right|^2}{2 \tau^2} \right]
+      \left\langle x_i x_j \right\rangle = \sigma_0^2 \delta_{ij} + \sigma^2
+      \exp\left[ - \frac{\left| t_i - t_j\right|^2}{2 \tau^2} \right]
     """
-
-    ndim = ts.shape[0]
 
     tis = ts[:, np.newaxis]
     tjs = ts[np.newaxis, :]
@@ -51,7 +47,8 @@ class Log1PPosterior(object):
         self.T = self.ts[-1] - self.ts[0]
         self.dt_min = np.min(np.diff(self.ts))
 
-    def to_params(self, p):
+    @staticmethod
+    def to_params(p):
         p = np.atleast_1d(p)
         return p.view(params_dtype)
 

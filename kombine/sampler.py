@@ -23,7 +23,7 @@ from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 
 class _GetLnProbWrapper(object):
-    """Convenience class for evaluating multiple probability densities at a
+    r"""Convenience class for evaluating multiple probability densities at a
     single point."""
 
     def __init__(self, lnpost, kde, *args):
@@ -32,7 +32,7 @@ class _GetLnProbWrapper(object):
         self.args = args
 
     def lnprobs(self, p):
-        """
+        r"""
         Evaluate the log probability density of the stored target distribution
          fuction
         and KDE at `p`.
@@ -58,7 +58,7 @@ class _GetLnProbWrapper(object):
 
 
 class Sampler(object):
-    """
+    r"""
     An Ensemble sampler.
 
     The :attr:`chain` member of this object has the shape: `(nsteps, nwalkers,
@@ -162,7 +162,7 @@ class Sampler(object):
         callback=None,
         **kwargs
     ):
-        """
+        r"""
         Evolve an ensemble until the acceptance rate becomes roughly constant.
         This is done by splitting acceptances in half and checking for
         statistical consistency.  This isn't guaranteed to return a fully
@@ -355,7 +355,7 @@ class Sampler(object):
         storechain=True,
         **kwargs
     ):
-        """
+        r"""
         Advance the ensemble `iterations` steps as a generator.
 
         :param p0: (optional)
@@ -389,7 +389,7 @@ class Sampler(object):
             Maximum sample size for KDE construction.  When the KDE is updated,
              existing samples are thinned by factors of two until there's
              enough room for `nwalkers` new samples. The default is `nwalkers`,
-              and must be greater than :math:`\geq``nwalkers` if specified.
+              and must be greater than :math:`\geq` `nwalkers` if specified.
 
         :param freeze_transd: (optional)
             If ``True`` when transdimensional sampling, walkers are confined to
@@ -531,7 +531,7 @@ class Sampler(object):
                         blob_p = None
 
                 # Catch any exceptions and exit gracefully
-                except Exception as e:
+                except Exception:
                     self.rollback(self.stored_iterations)
                     self._failed_p = p_p
 
@@ -603,7 +603,7 @@ class Sampler(object):
                 raise
 
     def ln_ev(self, ndraws):
-        """Produces a Monte-Carlo estimate of the evidence integral using the
+        r"""Produces a Monte-Carlo estimate of the evidence integral using the
         current propasal.
 
         :param ndraws: The number of draws to make from the proposal
@@ -647,7 +647,7 @@ class Sampler(object):
         return lnZ, dlnZ
 
     def draw(self, size, spaces=None):
-        """
+        r"""
         Draw `size` samples from the current proposal distribution.
 
         :param size:
@@ -667,7 +667,7 @@ class Sampler(object):
         return draws
 
     def trigger_update(self, interval=None):
-        """
+        r"""
         Decide whether to trigger a proposal update.
 
         :param interval:
@@ -692,7 +692,7 @@ class Sampler(object):
         return trigger
 
     def update_proposal(self, p, max_samples=None, **kwargs):
-        """
+        r"""
         Update the proposal density with points `p`.
 
         :param p:
@@ -728,28 +728,28 @@ class Sampler(object):
 
     @property
     def failed_p(self):
-        """
+        r"""
         Sample that caused the last exception.
         """
         return self._failed_p
 
     @property
     def chain(self):
-        """
+        r"""
         Ensemble's past samples, with shape `(iterations, nwalkers, ndim)`.
         """
         return self._chain
 
     @property
     def blobs(self):
-        """
+        r"""
         Ensemble's past metadata.
         """
         return self._blobs
 
     @property
     def lnpost(self):
-        """
+        r"""
         Ensemble's past posterior probabilities, with shape `(iterations,
         nwalkers)`.
         """
@@ -757,7 +757,7 @@ class Sampler(object):
 
     @property
     def lnprop(self):
-        """
+        r"""
         Ensemble's past proposal probabilities, with shape `(iterations,
         nwalkers)`.
         """
@@ -765,14 +765,14 @@ class Sampler(object):
 
     @property
     def updates(self):
-        """
+        r"""
         Step numbers where the proposal density was updated.
         """
         return self._updates
 
     @property
     def acceptance(self):
-        """
+        r"""
         Boolean array of ensemble's past acceptances, with shape `(iterations,
         nwalkers)`.
         """
@@ -780,7 +780,7 @@ class Sampler(object):
 
     @property
     def acceptance_fraction(self):
-        """
+        r"""
         A 1-D array of length :attr:`stored_iterations` of the fraction of
         walkers that accepted each step.
         """
@@ -788,7 +788,7 @@ class Sampler(object):
 
     @property
     def acceptance_rate(self):
-        """
+        r"""
         An `(nwalkers, )`-shaped array of the windowed acceptance rate for each
         walker.  The size of the window is chosen automatically based on the
         fraction of acceptances in the ensembles last step.  See :meth:
@@ -798,7 +798,7 @@ class Sampler(object):
 
     @property
     def autocorrelation_times(self, lookback=None):
-        """
+        r"""
         An `nwalkers`-long vector of the estimated autocorrelation time of each
          walker, estimated using the number of step acceptances over the last
          `lookback` steps.
@@ -830,7 +830,7 @@ class Sampler(object):
         return 2.0 / acc_rates - 1.0
 
     def windowed_acceptance_rate(self, window=None):
-        """
+        r"""
         An `(nwalkers, -1)`-shaped array of the windowed acceptance rate for
         each walker.
 
@@ -854,7 +854,7 @@ class Sampler(object):
         return rates
 
     def consistent_acceptance_rate(self, window_size=None, critical_pval=0.05):
-        """
+        r"""
         A convenience function for :meth:`burnin` and :meth:`trigger_update`.
         Returns ``True`` if the number of acceptances each step are consistent
         with the acceptance rate of the last step.  This is done using a
@@ -899,7 +899,7 @@ class Sampler(object):
         return consistent
 
     def rollback(self, iteration):
-        """
+        r"""
         Shrink internal arrays down to a length of `iteration` and reset the
         :attr:`pool` if there is one.  This is helpful for keeping things
         consistent after a :exc:`KeyboardInterrupt`.
@@ -913,7 +913,7 @@ class Sampler(object):
     def run_mcmc(
         self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None, **kwargs
     ):
-        """
+        r"""
         Iterate :meth:`sample` for `N` iterations and return the result.
 
         :param N:
@@ -1011,7 +1011,7 @@ class Sampler(object):
 
     @property
     def burnin_length(self):
-        """
+        r"""
         If :meth:`burnin` was not used, and ``burnin_length`` is
         ``None``, the iteration of the last proposal update will
         be used.
@@ -1022,7 +1022,7 @@ class Sampler(object):
             return self._burnin_length
 
     def get_samples(self, burnin_length=None):
-        """
+        r"""
         Extract the independent samples collected after burnin.
         If :meth:`burnin` was not used, and ``burnin_length`` is
         ``None``, the iteration of the last proposal update will
