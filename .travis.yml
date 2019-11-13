@@ -5,6 +5,8 @@ python:
   - "3.4"
   - "3.5"
   - "3.6"
+  - "3.7"
+  - "3.8"
 
 before_install:
   - pip install --upgrade pip
@@ -13,10 +15,12 @@ install:
   - python -m pip install .
 
 before_script:
-  - python -m pip install nose coverage codecov
+  - python -m pip install nose coverage codecov flake8
 
 script:
+  - flake8 .
   - nosetests --nologcapture -a '!slow' --with-coverage --cover-package kombine
+  - python -m unittest discover test
 
 after_success:
   - codecov
