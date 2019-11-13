@@ -4,9 +4,8 @@ import unittest
 
 
 class TestSampler(unittest.TestCase):
-
     def setUp(self):
-        self.lnpost = Posterior('../docs/_static/kombine.png')
+        self.lnpost = Posterior("../docs/_static/kombine.png")
         self.nwalkers = 1000
         self.ndim = 2
         self.sampler = Sampler(self.nwalkers, self.ndim, self.lnpost)

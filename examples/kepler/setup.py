@@ -4,8 +4,8 @@ from Cython.Distutils import build_ext
 import numpy as np
 
 setup(
-    name='rvfitting',
+    name="rvfitting",
     version="0.0.1",
-    cmdclass = {'build_ext': build_ext},
-    ext_modules = [Extension('kepler', ['kepler.pyx'], include_dirs=[np.get_include()])]
+    cmdclass={"build_ext": build_ext},
+    ext_modules=[Extension("kepler", ["kepler.pyx"], include_dirs=[np.get_include()])],
 )

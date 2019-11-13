@@ -11,7 +11,9 @@ from scipy.interpolate import RectBivariateSpline
 try:
     from scipy.misc import imread
 except ImportError:
-    print("This example uses scipy.misc.imread, which depends on Pillow (`pip install pillow`)")
+    print(
+        "This example uses scipy.misc.imread, which depends on Pillow (`pip install pillow`)"
+    )
 
 from matplotlib import animation as mpl_animation
 
@@ -30,6 +32,7 @@ class Posterior(object):
     """
     Posterior class for sampling a 2-D image.
     """
+
     def __init__(self, inp_img):
         self.ndim = 2
 
@@ -38,7 +41,7 @@ class Posterior(object):
 
         # Convert 'ij' indexing to 'xy' coordinates
         self.img = np.flipud(img).T
-        self._lower_left = np.array([0., 0.])
+        self._lower_left = np.array([0.0, 0.0])
         self._upper_right = self.img.shape
 
         # Construct a spline interpolant to use as a target
@@ -67,7 +70,7 @@ class Posterior(object):
         """
         Use a softened version of the interpolant as a likelihood.
         """
-        return -3.5*np.log(self._interpolant(X[0], X[1], grid=False))
+        return -3.5 * np.log(self._interpolant(X[0], X[1], grid=False))
 
     def lnpost(self, X):
         return self.lnprior(X) + self.lnlike(X)
@@ -75,7 +78,8 @@ class Posterior(object):
     def __call__(self, X):
         return self.lnpost(X)
 
-lnprob = Posterior('../docs/_static/kombine.png')
+
+lnprob = Posterior("../docs/_static/kombine.png")
 
 # Initially distribute the ensemble across the prior
 nwalkers = 1000
@@ -104,7 +108,7 @@ else:
     anim = prism.corner(sampler.chain)
 
     # Write the animation to file
-    writer = mpl_animation.writers['ffmpeg'](fps=30, bitrate=20000)
+    writer = mpl_animation.writers["ffmpeg"](fps=30, bitrate=20000)
     anim.save("kombine.mp4", writer=writer)
 
 np.savetxt("samples.dat", p)

@@ -23,9 +23,12 @@ from scipy.stats import multivariate_normal
 try:
     from mpipool import MPIPool
 except ImportError:
-    raise ImportError("Both mpipool (https://github.com/dfm/mpipool/) and mpi4py "
-                      "are required for MPI support and this example, along with "
-                      "a working installation of openMPI.")
+    raise ImportError(
+        "Both mpipool (https://github.com/dfm/mpipool/) and mpi4py "
+        "are required for MPI support and this example, along with "
+        "a working installation of openMPI."
+    )
+
 
 class Model(object):
     def __init__(self, mean, cov):
@@ -39,10 +42,11 @@ class Model(object):
     def __call__(self, x):
         return self.lnposterior(x)
 
+
 ndim = 3
 A = np.random.rand(ndim, ndim)
 mean = np.zeros(ndim)
-cov = A*A.T + ndim*np.eye(ndim)
+cov = A * A.T + ndim * np.eye(ndim)
 
 # create an ND Gaussian model
 model = Model(mean, cov)
