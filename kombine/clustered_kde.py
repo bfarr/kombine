@@ -4,7 +4,12 @@
 The kernel density estimators.
 """
 
-from __future__ import division, print_function, absolute_import, unicode_literals
+from __future__ import (
+    division,
+    print_function,
+    absolute_import,
+    unicode_literals,
+)
 
 import numpy as np
 import numpy.ma as ma
@@ -22,13 +27,15 @@ np.seterr(divide="ignore")
 
 def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
     """
-    Iteratively run a k-means clustering algorithm, estimating the distibution of each identified
-    cluster with an independent kernel density estimate.  Starting with ``k = 1``, the distribution
-    is estimated and the Bayes Information criterion (BIC) is calculated.  `k` is increased until
-    the BIC stops increasing.
+    Iteratively run a k-means clustering algorithm, estimating the distibution
+    of each identified cluster with an independent kernel density estimate.
+    Starting with ``k = 1``, the distribution is estimated and the Bayes
+    Information criterion (BIC) is calculated.  `k` is increased until the BIC
+    stops increasing.
 
     :param data:
-        An `(N, ndim)`-shaped array, containing `N` samples from the target distribution.
+        An `(N, ndim)`-shaped array, containing `N` samples from the target
+        distribution.
 
     :param pool: (optional)
         A pool of processes with a :func:`map` function to use.
@@ -37,9 +44,9 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
         An old KDE to inherit samples from.
 
     :param max_samples: (optional)
-        The maximum number of samples to use for constructing or updating the KDE.  If a KDE is
-        supplied and adding the samples from it will go over this, old samples are thinned by
-        factors of two until under the limit.
+        The maximum number of samples to use for constructing or updating the
+        KDE.  If a KDE is supplied and adding the samples from it will go over
+        this, old samples are thinned by factors of two until under the limit.
 
     :param kwargs: (optional)
         Keyword arguments to pass to :class:`ClusteredKDE`.
@@ -97,12 +104,14 @@ def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
 
 class ClusteredKDE(object):
     """
-    Run a k-means clustering algorithm, estimating the distibution of each identified cluster with
-    an independent kernel density estimate.  The full distibution is then estimated by combining the
-    individual KDE's, weighted by the fraction of samples assigned to each cluster.
+    Run a k-means clustering algorithm, estimating the distibution of each
+    identified cluster with an independent kernel density estimate.  The full
+    distibution is then estimated by combining the individual KDE's, weighted
+    by the fraction of samples assigned to each cluster.
 
     :param data:
-        An `(N, ndim)`-shaped array, containing `N` samples from the target distribution.
+        An `(N, ndim)`-shaped array, containing `N` samples from the target
+        distribution.
 
     :param k:
         The number of clusters for k-means clustering.
@@ -115,14 +124,18 @@ class ClusteredKDE(object):
         self._mean = np.mean(data, axis=0)
         self._std = np.std(data, axis=0)
 
-        # Cluster data that's mean 0 and scaled to unit width in each parameter independently
+        # Cluster data that's mean 0 and scaled to unit width in each parameter
+        # independently
         white_data = self._whiten(data)
         self._centroids, _ = kmeans(white_data, k)
         self._assignments, _ = vq(white_data, self.centroids)
 
         self._kdes = [KDE(self.data[self.assignments == c]) for c in range(k)]
         self._logweights = np.log(
-            [np.count_nonzero(self.assignments == c) / self.size for c in range(k)]
+            [
+                np.count_nonzero(self.assignments == c) / self.size
+                for c in range(k)
+            ]
         )
 
     def draw(self, size=1):
@@ -159,17 +172,20 @@ class ClusteredKDE(object):
 
     def bic(self, pool=None):
         r"""
-        Evaluate Bayes Information Criterion for the KDE's estimate of the distribution
+        Evaluate Bayes Information Criterion for the KDE's estimate of the
+        distribution
 
         .. math::
 
-            \mathrm{BIC} = \mathrm{ln}\mathcal{L}_\mathrm{max} - \frac{d_m}{2} \mathrm{ln} N
+            \mathrm{BIC} = \mathrm{ln}\mathcal{L}_\mathrm{max} - \frac{d_m}{2}
+            \mathrm{ln} N
 
-        where :math:`d_m` is the number of dimensions of the KDE model (:math:`n_\mathrm{clusters}
-        d` centroid location parameters, :math:`n_\mathrm{clusters} - 1` normalized weights, and
-        :math:`n_\mathrm{clusters} (d+1)*d/2` kernel covariance parameters, one matrix for each of
-        :math:`n_\mathrm{clusters}` clusters), and :math:`N` is the number of samples used to build
-        the KDE.
+        where :math:`d_m` is the number of dimensions of the KDE model (:math:
+        `n_\mathrm{clusters} d` centroid location parameters, :math:
+        `n_\mathrm{clusters} - 1` normalized weights, and :math:\
+        n_\mathrm{clusters} (d+1)*d/2` kernel covariance parameters, one matrix
+        for each of :math:`n_\mathrm{clusters}` clusters), and :math:`N` is the
+         number of samples used to build the KDE.
         """
         log_l = np.sum(self.logpdf(self.data, pool=pool))
 
@@ -222,13 +238,15 @@ class ClusteredKDE(object):
 
 class KDE(object):
     """
-    A Gaussian kernel density estimator that provides a means for evaluating the estimated
-    probability density function, and drawing additional samples from the estimated distribution.
-    Cholesky decomposition of the covariance matrix makes this class a bit more stable than the
-    :mod:`scipy`'s Gaussian KDE.
+    A Gaussian kernel density estimator that provides a means for evaluating
+    the estimated probability density function, and drawing additional samples
+    from the estimated distribution. Cholesky decomposition of the covariance
+    matrix makes this class a bit more stable than the :mod:`scipy`'s Gaussian
+    KDE.
 
     :param data:
-        An `(N, ndim)`-shaped array, containing `N` samples from the target distribution.
+        An `(N, ndim)`-shaped array, containing `N` samples from the target
+        distribution.
 
     """
 
@@ -352,12 +370,13 @@ class KDE(object):
 
 def unique_spaces(mask):
     """
-    Determine the unique sets of dimensions based on a mask.  Inverted 1D masks are returned to use
-    as selectors.
+    Determine the unique sets of dimensions based on a mask.  Inverted 1D masks
+     are returned to use as selectors.
     """
     ncols = mask.shape[1]
 
-    # Do some magic with views so `np.unique` can be used to find the unique sets of dimensions.
+    # Do some magic with views so `np.unique` can be used to find the unique
+    # sets of dimensions.
     dtype = mask.dtype.descr * ncols
     struct = mask.view(dtype)
 
@@ -368,20 +387,23 @@ def unique_spaces(mask):
 
 class TransdimensionalKDE(object):
     """
-    A generalized Gaussian kernel density estimator that reads masked arrays, constructs a
-    :class:`ClusteredKDE` using :func:`optimized_kde` for each unique parameter space, then weighs
-    the KDEs based on the number of samples in each parameter space.
+    A generalized Gaussian kernel density estimator that reads masked arrays,
+    constructs a :class:`ClusteredKDE` using :func:`optimized_kde` for each
+    unique parameter space, then weighs the KDEs based on the number of samples
+     in each parameter space.
 
     :param data:
-        An `(N, max_dim)`-shaped masked array, containing N samples from the the target distribution.
+        An `(N, max_dim)`-shaped masked array, containing N samples from the
+        target distribution.
 
     :param kde: (optional)
         An old trans-dimensional KDE to inherit samples from.
 
     :param max_samples: (optional)
-        The maximum number of samples to use for constructing or updating the kde in each unique
-        parameter space. If a KDE is supplied and adding the samples from `data` will go over this,
-        old samples are thinned by factors of two until under the limit in each parameter space.
+        The maximum number of samples to use for constructing or updating the
+        kde in each unique parameter space. If a KDE is supplied and adding the
+         samples from `data` will go over this, old samples are thinned by
+         factors of two until under the limit in each parameter space.
     """
 
     def __init__(self, data, kde=None, max_samples=None, pool=None):
@@ -392,7 +414,8 @@ class TransdimensionalKDE(object):
             # Save an (inverted) mask for each unique set of dimensions
             self._spaces = unique_spaces(data.mask)
         else:
-            # Inherit old space definitions, in case the new sample has no points in a subspace
+            # Inherit old space definitions, in case the new sample has no
+            # points in a subspace
             self._spaces = kde.spaces
 
         # Construct a separate clustered-KDE for each parameter space
@@ -417,7 +440,9 @@ class TransdimensionalKDE(object):
             if kde is not None:
                 old_kde = kde.kdes[space_id]
 
-            self._kdes.append(optimized_kde(fixd_data, pool, old_kde, max_samples))
+            self._kdes.append(
+                optimized_kde(fixd_data, pool, old_kde, max_samples)
+            )
 
         self._logweights = np.log(np.array(weights))
 
@@ -427,7 +452,9 @@ class TransdimensionalKDE(object):
         """
         if spaces is not None:
             if len(spaces) != size:
-                raise ValueError("Sample size inconsistent with number of spaces saved")
+                raise ValueError(
+                    "Sample size inconsistent with number of " "spaces saved"
+                )
             space_inds = np.empty(size)
             for space_id, space in enumerate(self.spaces):
                 subspace = np.all(spaces == space, axis=1)
@@ -436,7 +463,9 @@ class TransdimensionalKDE(object):
         else:
             # Draws spaces randomly with the assigned weights
             cumulative_weights = np.cumsum(np.exp(self._logweights))
-            space_inds = np.searchsorted(cumulative_weights, np.random.rand(size))
+            space_inds = np.searchsorted(
+                cumulative_weights, np.random.rand(size)
+            )
 
         draws = ma.masked_all((size, self._max_ndim))
         for space_id in range(len(self.spaces)):
@@ -444,16 +473,19 @@ class TransdimensionalKDE(object):
             n_fixedd = np.count_nonzero(sel)
             if n_fixedd > 0:
                 # Populate only the valid entries for this parameter space
-                draws[np.ix_(sel, self._spaces[space_id])] = self.kdes[space_id].draw(
-                    n_fixedd
-                )
+                draws[np.ix_(sel, self._spaces[space_id])] = self.kdes[
+                    space_id
+                ].draw(n_fixedd)
 
         return draws
 
     def logpdf(self, pts, pool=None):
-        """Evaluate the log-transdimensional-pdf at `pts` as estimated by the KDE."""
+        """Evaluate the log-transdimensional-pdf at `pts` as estimated by
+        the KDE."""
         logpdfs = []
-        for logweight, space, kde in zip(self._logweights, self.spaces, self.kdes):
+        for logweight, space, kde in zip(
+            self._logweights, self.spaces, self.kdes
+        ):
             # Calculate the probability for each parameter space individually
             if np.all(space == ~pts.mask) and np.isfinite(logweight):
                 logpdfs.append(logweight + kde(pts[space], pool=pool))
@@ -475,9 +507,10 @@ class TransdimensionalKDE(object):
 
 def _evaluate_point_logpdf(args):
     """
-    Evaluate the Gaussian KDE at a given point `p`.  This lives outside the KDE method to allow for
-    parallelization using :mod:`multipocessing`. Since :func:`map` only allows single-argument
-    functions, the following arguments to be packed into a single tuple.
+    Evaluate the Gaussian KDE at a given point `p`.  This lives outside the KDE
+     method to allow for parallelization using :mod:`multipocessing`. Since
+     :func:`map` only allows single-argument functions, the following arguments
+      to be packed into a single tuple.
 
     :param p:
         The point to evaluate the KDE at.
@@ -501,17 +534,20 @@ def _evaluate_point_logpdf(args):
 
 def oas_cov(pts):
     r"""
-    Estimate the covariance matrix using the Oracle Approximating Shrinkage algorithm
+    Estimate the covariance matrix using the Oracle Approximating Shrinkage
+     algorithm
 
     .. math::
 
         (1 - s)\Sigma + s \mu \mathcal{I}_d
 
-    where :math:`\mu = \mathrm{tr}(\Sigma) / d`.  This ensures the covariance matrix estimate is
+    where :math:`\mu = \mathrm{tr}(\Sigma) / d`.  This ensures the covariance
+     matrix estimate is
     well behaved for small sample sizes.
 
     :param pts:
-        An `(N, ndim)`-shaped array, containing `N` samples from the target distribution.
+        An `(N, ndim)`-shaped array, containing `N` samples from the target
+         distribution.
 
 
     This follows the implementation in `scikit-learn

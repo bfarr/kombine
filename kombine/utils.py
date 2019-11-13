@@ -40,7 +40,9 @@ def gelman_rubin(chains, return_cdf=False):
     chain_vars = np.var(chains, axis=0)
 
     # between-chain variance
-    interchain_var = np.sum((chain_means - np.mean(chains)) ** 2) / (nchains - 1)
+    interchain_var = np.sum((chain_means - np.mean(chains)) ** 2) / (
+        nchains - 1
+    )
 
     # within-chain variances
     intrachain_vars = (chains - chain_means) ** 2 / (nsteps - 1)

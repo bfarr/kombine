@@ -7,5 +7,7 @@ setup(
     name="rvfitting",
     version="0.0.1",
     cmdclass={"build_ext": build_ext},
-    ext_modules=[Extension("kepler", ["kepler.pyx"], include_dirs=[np.get_include()])],
+    ext_modules=[
+        Extension("kepler", ["kepler.pyx"], include_dirs=[np.get_include()])
+    ],
 )

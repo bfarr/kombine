@@ -109,4 +109,6 @@ class Log1PPosterior(object):
     def rvs(self, p):
         p = self.to_params(p)
 
-        return rv.rv_model(self.ts, p["K"], p["e"], p["omega"], p["chi"], p["P"])
+        return rv.rv_model(
+            self.ts, p["K"], p["e"], p["omega"], p["chi"], p["P"]
+        )

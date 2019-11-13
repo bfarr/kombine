@@ -9,7 +9,9 @@ class DataGenerator(object):
     """Generate synthetic data for some number of telescopes observing
     some number of planets."""
 
-    def __init__(self, params, tsundowns=None, cadences=None, tstarts=None, tends=None):
+    def __init__(
+        self, params, tsundowns=None, cadences=None, tstarts=None, tends=None
+    ):
         """Initialize a data generator for the given system
         parameters.  
 
@@ -108,7 +110,9 @@ class DataGenerator(object):
             self.tstarts, self.tends, self.tsundowns, self.cadences
         ):
             tobs.append(
-                self.filter_times(self.generate_poisson(tstart, tend, cadence), sundown)
+                self.filter_times(
+                    self.generate_poisson(tstart, tend, cadence), sundown
+                )
             )
 
         return tobs
@@ -117,7 +121,11 @@ class DataGenerator(object):
 
         noise = []
         for t, V, sigma0, sigma, tau in zip(
-            ts, self.params.V, self.params.sigma0, self.params.sigma, self.params.tau
+            ts,
+            self.params.V,
+            self.params.sigma0,
+            self.params.sigma,
+            self.params.tau,
         ):
             cov = cl.generate_covariance(t, sigma0, sigma, tau)
             A = nl.cholesky(cov)

@@ -45,11 +45,15 @@ class Pool(MPPool):
         Extra arguments. Python 2.7 supports a `maxtasksperchild` parameter.
     """
 
-    def __init__(self, processes=None, initializer=None, initargs=(), **kwargs):
+    def __init__(
+        self, processes=None, initializer=None, initargs=(), **kwargs
+    ):
         self._wait_timeout = 3600
 
         new_initializer = functools.partial(_initializer_wrapper, initializer)
-        super(Pool, self).__init__(processes, new_initializer, initargs, **kwargs)
+        super(Pool, self).__init__(
+            processes, new_initializer, initargs, **kwargs
+        )
 
     def map(self, func, items, chunksize=None):
         """

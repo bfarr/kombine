@@ -83,7 +83,9 @@ def check_kde_normalization(kde, thresh=1e-5):
     prob = np.trapz(np.trapz(pdf, x), x)
     assert (
         np.abs(1.0 - prob) < thresh
-    ), "KDE not properly normalized.  KDE found to integrate to {:.7f}".format(prob)
+    ), "KDE not properly normalized.  KDE found to integrate to {:.7f}".format(
+        prob
+    )
 
 
 def check_kde(kde, test_dist):
@@ -147,7 +149,10 @@ class TestSampler:
             pass
 
         p = self.sampler.chain[-1]
-        mode_sel = [np.all(p < self.split, axis=1), np.all(p > self.split, axis=1)]
+        mode_sel = [
+            np.all(p < self.split, axis=1),
+            np.all(p > self.split, axis=1),
+        ]
         count_std = self.nwalkers * 1 / self.nmodes * (1 - 1 / self.nmodes)
 
         for mean, sel in zip(self.target.means, mode_sel):
@@ -155,7 +160,9 @@ class TestSampler:
                 np.abs(np.count_nonzero(sel) - self.nwalkers / self.nmodes)
                 < std_threshold * count_std
             )
-            assert np.all((np.mean(p[sel], axis=0) - mean) ** 2 < 10.0 ** log_threshold)
+            assert np.all(
+                (np.mean(p[sel], axis=0) - mean) ** 2 < 10.0 ** log_threshold
+            )
             assert np.all(
                 (np.cov(p[sel], rowvar=0) - self.target.cov) ** 2
                 < 10.0 ** log_threshold
@@ -163,14 +170,20 @@ class TestSampler:
 
         # Check marginal likelihood estimate
         lnZ, dlnZ = self.sampler.ln_ev(self.nwalkers)
-        assert np.abs(lnZ - self.target.ln_marginal_prob) < std_threshold * dlnZ
+        assert (
+            np.abs(lnZ - self.target.ln_marginal_prob) < std_threshold * dlnZ
+        )
 
     def test_sampler_serially(self):
-        self.sampler = Sampler(self.nwalkers, self.ndim, self.target, processes=1)
+        self.sampler = Sampler(
+            self.nwalkers, self.ndim, self.target, processes=1
+        )
         self.check_sampling()
 
     def test_sampler_parallelly(self):
-        self.sampler = Sampler(self.nwalkers, self.ndim, self.target, processes=4)
+        self.sampler = Sampler(
+            self.nwalkers, self.ndim, self.target, processes=4
+        )
         self.check_sampling()
 
     def test_burnin(self):
@@ -180,7 +193,9 @@ class TestSampler:
 
     def test_blobs(self):
         blobby_target = lambda p: (self.target(p), np.random.randn())
-        self.sampler = Sampler(self.nwalkers, self.ndim, blobby_target, processes=1)
+        self.sampler = Sampler(
+            self.nwalkers, self.ndim, blobby_target, processes=1
+        )
         self.check_sampling()
 
         blobs = np.array(self.sampler.blobs)
@@ -188,7 +203,10 @@ class TestSampler:
             self.nsteps,
             self.nwalkers,
             self.ndim,
-        ) and blobs.shape == (self.nsteps, self.nwalkers), "You broke the blob!"
+        ) and blobs.shape == (
+            self.nsteps,
+            self.nwalkers,
+        ), "You broke the blob!"
 
         # Make sure some blobs were updated
         assert (

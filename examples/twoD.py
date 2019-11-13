@@ -12,7 +12,8 @@ try:
     from scipy.misc import imread
 except ImportError:
     print(
-        "This example uses scipy.misc.imread, which depends on Pillow (`pip install pillow`)"
+        "This example uses scipy.misc.imread, which depends on Pillow (`pip "
+        "install pillow`)"
     )
 
 from matplotlib import animation as mpl_animation
