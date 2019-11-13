@@ -4,7 +4,7 @@
 A kernel-density-based, embarrassingly parallel ensemble sampler.
 """
 
-from __future__ import (division, print_function, absolute_import, unicode_literals)
+from __future__ import division, print_function, absolute_import, unicode_literals
 
 from .interruptible_pool import Pool
 from .serialpool import SerialPool
@@ -16,8 +16,10 @@ from scipy.stats import chisquare
 
 from .clustered_kde import optimized_kde, TransdimensionalKDE
 
+
 class _GetLnProbWrapper(object):
     """Convenience class for evaluating multiple probability densities at a single point."""
+
     def __init__(self, lnpost, kde, *args):
         self.lnpost = lnpost
         self.kde = kde
@@ -46,6 +48,7 @@ class _GetLnProbWrapper(object):
             return lnpost, kde
 
     __call__ = lnprobs
+
 
 class Sampler(object):
     """
@@ -80,8 +83,10 @@ class Sampler(object):
         :mod:`multiprocessing`.
 
     """
-    def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
-                 processes=None, pool=None, args=[]):
+
+    def __init__(
+        self, nwalkers, ndim, lnpostfn, transd=False, processes=None, pool=None, args=[]
+    ):
         self.nwalkers = nwalkers
         self.dim = ndim
         self._kde = None
@@ -110,7 +115,7 @@ class Sampler(object):
             # create a multiprocessing pool
             self.pool = Pool(self.processes)
 
-        if not hasattr(self.pool, 'map'):
+        if not hasattr(self.pool, "map"):
             raise AttributeError("Pool object must have a map() method.")
 
         self._transd = transd
@@ -128,9 +133,19 @@ class Sampler(object):
         self._burnin_spaces = None
         self._failed_p = None
 
-    def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               test_steps=16, critical_pval=0.05, max_steps=None,
-               verbose=False, callback=None, **kwargs):
+    def burnin(
+        self,
+        p0=None,
+        lnpost0=None,
+        lnprop0=None,
+        blob0=None,
+        test_steps=16,
+        critical_pval=0.05,
+        max_steps=None,
+        verbose=False,
+        callback=None,
+        **kwargs
+    ):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
         splitting acceptances in half and checking for statistical consistency.  This isn't
@@ -208,13 +223,20 @@ class Sampler(object):
                 self.update_proposal(p0, max_samples=self.nwalkers)
                 lnprop0 = self._kde(p0)
             if verbose:
-                print('Updated proposal')
+                print("Updated proposal")
 
             # Take one step to estimate acceptance rate
             test_interval = 1
-            results = self.run_mcmc(test_interval, p0, lnpost0, lnprop0, blob0,
-                                    freeze_transd=freeze_transd, spaces=self._burnin_spaces,
-                                    **kwargs)
+            results = self.run_mcmc(
+                test_interval,
+                p0,
+                lnpost0,
+                lnprop0,
+                blob0,
+                freeze_transd=freeze_transd,
+                spaces=self._burnin_spaces,
+                **kwargs
+            )
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
@@ -226,24 +248,31 @@ class Sampler(object):
             last_acc_rate = max(np.mean(self.acceptance[-1]), 0.01)
 
             # Estimate ACT based on acceptance
-            act = int(np.ceil(2.0/last_acc_rate - 1.0))
+            act = int(np.ceil(2.0 / last_acc_rate - 1.0))
 
             if verbose:
-                print('Single-step acceptance rate is ', last_acc_rate)
-                print('Producing ACT of ', act)
+                print("Single-step acceptance rate is ", last_acc_rate)
+                print("Producing ACT of ", act)
 
             # Use the ACT to set the new test interval, but avoid
             # overstepping a specified max.  We throw away the first
             # 2*act worth of steps as an initial burnin when comparing
             # acceptance rates
-            test_interval = min((step_size+2)*act, max_iter - self.iterations)
+            test_interval = min((step_size + 2) * act, max_iter - self.iterations)
 
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
 
-            results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
-                                    freeze_transd=freeze_transd, spaces=self._burnin_spaces,
-                                    **kwargs)
+            results = self.run_mcmc(
+                test_interval,
+                p,
+                lnpost,
+                lnprop,
+                blob,
+                freeze_transd=freeze_transd,
+                spaces=self._burnin_spaces,
+                **kwargs
+            )
             try:
                 p, lnpost, lnprop, blob = results
             except ValueError:
@@ -259,16 +288,18 @@ class Sampler(object):
                 break
 
             # Only check for consistency past the burn-in stage of 2*act
-            if self.consistent_acceptance_rate(window_size=step_size*act, critical_pval=critical_pval):
+            if self.consistent_acceptance_rate(
+                window_size=step_size * act, critical_pval=critical_pval
+            ):
                 if verbose:
-                    print('Acceptance rate constant over ', step_size, ' ACTs')
+                    print("Acceptance rate constant over ", step_size, " ACTs")
                 step_size *= 2
             else:
                 if verbose:
-                    print('Acceptance rate varies, trying again')
+                    print("Acceptance rate varies, trying again")
 
             if verbose:
-                print('') # Newline
+                print("")  # Newline
 
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
 
@@ -279,9 +310,21 @@ class Sampler(object):
         else:
             return p, lnpost, lnprop, blob
 
-    def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
-               iterations=1, kde=None, update_interval=None, kde_size=None,
-               freeze_transd=False, spaces=None, storechain=True, **kwargs):
+    def sample(
+        self,
+        p0=None,
+        lnpost0=None,
+        lnprop0=None,
+        blob0=None,
+        iterations=1,
+        kde=None,
+        update_interval=None,
+        kde_size=None,
+        freeze_transd=False,
+        spaces=None,
+        storechain=True,
+        **kwargs
+    ):
         """
         Advance the ensemble `iterations` steps as a generator.
 
@@ -374,7 +417,9 @@ class Sampler(object):
         blob = blob0
 
         if lnpost is None or lnprop is None:
-            results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p))
+            results = list(
+                m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p)
+            )
             lnpost = np.array([r[0] for r in results]) if lnpost is None else lnpost
             lnprop = np.array([r[1] for r in results]) if lnprop is None else lnprop
 
@@ -386,22 +431,29 @@ class Sampler(object):
 
         # ensure blob has the right shape
         if blob is None:
-            blob = [None]*self.nwalkers
+            blob = [None] * self.nwalkers
 
         # Prepare arrays for storage ahead of time
-        self._acceptance = np.concatenate((self._acceptance,
-                                           np.zeros((iterations, self.nwalkers))))
+        self._acceptance = np.concatenate(
+            (self._acceptance, np.zeros((iterations, self.nwalkers)))
+        )
         if storechain:
             # Make sure to mask things if the stored chain has a mask
             if hasattr(self._chain, "mask"):
-                self._chain = ma.concatenate((self._chain,
-                                              ma.masked_all((iterations, self.nwalkers, self.dim))))
+                self._chain = ma.concatenate(
+                    (self._chain, ma.masked_all((iterations, self.nwalkers, self.dim)))
+                )
             else:
-                self._chain = np.concatenate((self._chain,
-                                              np.zeros((iterations, self.nwalkers, self.dim))))
+                self._chain = np.concatenate(
+                    (self._chain, np.zeros((iterations, self.nwalkers, self.dim)))
+                )
 
-            self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
-            self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
+            self._lnpost = np.concatenate(
+                (self._lnpost, np.zeros((iterations, self.nwalkers)))
+            )
+            self._lnprop = np.concatenate(
+                (self._lnprop, np.zeros((iterations, self.nwalkers)))
+            )
 
         for i in range(int(iterations)):
             try:
@@ -413,8 +465,14 @@ class Sampler(object):
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
                 try:
-                    results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde,
-                                                       *self._lnpost_args), p_p))
+                    results = list(
+                        m(
+                            _GetLnProbWrapper(
+                                self._get_lnpost, self._kde, *self._lnpost_args
+                            ),
+                            p_p,
+                        )
+                    )
 
                     lnpost_p = np.array([r[0] for r in results])
                     lnprop_p = np.array([r[1] for r in results])
@@ -505,18 +563,22 @@ class Sampler(object):
 
         m = self.pool.map
 
-        results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), pts))
+        results = list(
+            m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), pts)
+        )
         lnpost = np.array([r[0] for r in results])
         lnprop = np.array([r[1] for r in results])
 
         lninteg = lnpost - lnprop
         lnZ = np.logaddexp.reduce(lninteg) - np.log(lninteg.shape[0])
-        lnZ2 = np.logaddexp.reduce(2.0*lninteg) - np.log(lninteg.shape[0])
+        lnZ2 = np.logaddexp.reduce(2.0 * lninteg) - np.log(lninteg.shape[0])
 
         # sigma^2 = <Z^2> - <Z>^2
         # log(sigma^2) = log(<Z^2>) + log(1 - <Z>^2/<Z^2>)
         # Standard error = sqrt(sigma^2/N)
-        lnsZ = 0.5*(lnZ2 + np.log1p(-np.exp(2.0*lnZ - lnZ2)) - np.log(lninteg.shape[0]))
+        lnsZ = 0.5 * (
+            lnZ2 + np.log1p(-np.exp(2.0 * lnZ - lnZ2)) - np.log(lninteg.shape[0])
+        )
 
         # dlnZ = sigma / Z
         dlnZ = np.exp(lnsZ - lnZ)
@@ -557,7 +619,7 @@ class Sampler(object):
         trigger = False
         if interval is None:
             trigger = False
-        elif interval == 'auto':
+        elif interval == "auto":
             trigger = not self.consistent_acceptance_rate()
         elif isinstance(interval, int):
             if self.iterations % interval == 0:
@@ -585,11 +647,13 @@ class Sampler(object):
         self._updates.append(self.iterations)
 
         if self._transd:
-            self._kde = TransdimensionalKDE(p, pool=self.pool, kde=self._kde,
-                                            max_samples=self._kde_size, **kwargs)
+            self._kde = TransdimensionalKDE(
+                p, pool=self.pool, kde=self._kde, max_samples=self._kde_size, **kwargs
+            )
         else:
-            self._kde = optimized_kde(p, pool=self.pool, kde=self._kde,
-                                      max_samples=self._kde_size, **kwargs)
+            self._kde = optimized_kde(
+                p, pool=self.pool, kde=self._kde, max_samples=self._kde_size, **kwargs
+            )
 
     @property
     def failed_p(self):
@@ -684,7 +748,7 @@ class Sampler(object):
 
         acc_rates = np.mean(self.acceptance[lookback:], axis=0)
 
-        return 2.0/acc_rates - 1.0
+        return 2.0 / acc_rates - 1.0
 
     def windowed_acceptance_rate(self, window=None):
         """
@@ -698,13 +762,13 @@ class Sampler(object):
 
         # Use the mean acceptance rate of the last step to set the window
         if window is None:
-            window = 20 * 1//np.mean(self.acceptance[-1])
+            window = 20 * 1 // np.mean(self.acceptance[-1])
 
         rates = np.empty((self.nwalkers, N - window + 1))
-        weights = np.ones(window)/window
+        weights = np.ones(window) / window
 
         for w in range(self.nwalkers):
-            rates[w] = np.convolve(self.acceptance[:, w], weights, 'valid')
+            rates[w] = np.convolve(self.acceptance[:, w], weights, "valid")
 
         return rates
 
@@ -737,7 +801,9 @@ class Sampler(object):
         if window_length > 2:
             last_acc_rate = self.acceptance_fraction[-1]
 
-            nacc = self.nwalkers * self.acceptance_fraction[window_start:self.iterations]
+            nacc = (
+                self.nwalkers * self.acceptance_fraction[window_start : self.iterations]
+            )
             expected_freqs = last_acc_rate * self.nwalkers * np.ones_like(nacc)
 
             _, p_val = chisquare(nacc, expected_freqs)
@@ -810,7 +876,9 @@ class Sampler(object):
                     if lnprop0 is None:
                         lnprop0 = self.lnprop[-1]
                 except IndexError:
-                    raise ValueError("Cannot have p0=None if the sampler hasn't been called.")
+                    raise ValueError(
+                        "Cannot have p0=None if the sampler hasn't been called."
+                    )
             else:
                 p0 = self._last_run_mcmc_result[0]
                 if lnpost0 is None:
@@ -819,8 +887,17 @@ class Sampler(object):
                     lnprop0 = self._last_run_mcmc_result[2]
 
         if self._kde is not None:
-            if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
-                results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p0))
+            if self._last_run_mcmc_result is None and (
+                lnpost0 is None or lnprop0 is None
+            ):
+                results = list(
+                    m(
+                        _GetLnProbWrapper(
+                            self._get_lnpost, self._kde, *self._lnpost_args
+                        ),
+                        p0,
+                    )
+                )
 
                 if lnpost0 is None:
                     lnpost0 = np.array([r[0] for r in results])
@@ -867,6 +944,8 @@ class Sampler(object):
         if burnin_length is None:
             burnin_length = self.burnin_length
         ACTs = np.ceil(self.autocorrelation_times).astype(int)
-        samples = [self.chain[burnin_length::ACT, walker]
-                   for walker, ACT in zip(range(self.nwalkers), ACTs)]
+        samples = [
+            self.chain[burnin_length::ACT, walker]
+            for walker, ACT in zip(range(self.nwalkers), ACTs)
+        ]
         return np.vstack(samples)

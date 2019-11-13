@@ -9,6 +9,7 @@ import scipy
 
 from scipy.stats.distributions import f
 
+
 def gelman_rubin(chains, return_cdf=False):
     """
     Compute the Gelman-Rubin R-statistic from an ensemble of chains.  `chains`
@@ -24,8 +25,10 @@ def gelman_rubin(chains, return_cdf=False):
         returned in addition to the R-statistic(s).
     """
     if len(chains.shape) > 2:
-        results = [gelman_rubin(chains[..., param], return_cdf=return_cdf)
-                   for param in range(chains.shape[-1])]
+        results = [
+            gelman_rubin(chains[..., param], return_cdf=return_cdf)
+            for param in range(chains.shape[-1])
+        ]
         if return_cdf:
             return zip(*results)
         else:
@@ -40,8 +43,8 @@ def gelman_rubin(chains, return_cdf=False):
     interchain_var = np.sum((chain_means - np.mean(chains)) ** 2) / (nchains - 1)
 
     # within-chain variances
-    intrachain_vars = (chains - chain_means)**2 / (nsteps - 1)
-    intrachain_var = np.sum(intrachain_vars)/nchains
+    intrachain_vars = (chains - chain_means) ** 2 / (nsteps - 1)
+    intrachain_var = np.sum(intrachain_vars) / nchains
 
     var = intrachain_var * (nsteps - 1) / nsteps + interchain_var
     post_var = var + interchain_var / nchains
@@ -52,7 +55,7 @@ def gelman_rubin(chains, return_cdf=False):
     if return_cdf:
         # R should be F-distributed
         dof1 = nchains - 1
-        dof2 = 2*intrachain_var**2*nchains/np.var(intrachain_vars)
+        dof2 = 2 * intrachain_var ** 2 * nchains / np.var(intrachain_vars)
         return R, f.cdf(R, dof1, dof2)
     else:
         return R

@@ -1,5 +1,5 @@
 from kombine.sampler import Sampler
-from examples.twoD import Posterior
+from ..examples.twoD import Posterior
 import unittest
 
 

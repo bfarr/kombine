@@ -2,8 +2,8 @@
 
 """ Utility class for a uniform Pool API for serial processing """
 
-class SerialPool(object):
 
+class SerialPool(object):
     def close(self):
         return
 

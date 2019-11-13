@@ -17,23 +17,32 @@ from .clustered_kde import TransdimensionalKDE
 
 from .sampler import Sampler
 
+
 class MultimodalTestDistribution(object):
     def __init__(self, nmodes=1, ndim=2):
         self.nmodes = nmodes
         self.ndim = ndim
 
-        dx = 1./(self.nmodes + 1)
-        self.cov = .005*dx*np.eye(self.ndim)
-        means = (1.+np.arange(nmodes))*dx
+        dx = 1.0 / (self.nmodes + 1)
+        self.cov = 0.005 * dx * np.eye(self.ndim)
+        means = (1.0 + np.arange(nmodes)) * dx
         self.means = np.column_stack([means for dim in range(self.ndim)])
 
     def draw(self, mode_size=1000):
-        return np.vstack([multivariate_normal.rvs(mean, self.cov, size=mode_size) for mean in self.means])
+        return np.vstack(
+            [
+                multivariate_normal.rvs(mean, self.cov, size=mode_size)
+                for mean in self.means
+            ]
+        )
 
     def logpdf(self, x):
-        #x = np.atleast_2d(x)
+        # x = np.atleast_2d(x)
 
-        log_probs = [multivariate_normal.logpdf(x, mean, self.cov) - np.log(self.nmodes) for mean in self.means]
+        log_probs = [
+            multivariate_normal.logpdf(x, mean, self.cov) - np.log(self.nmodes)
+            for mean in self.means
+        ]
         return np.logaddexp.reduce(log_probs)
 
     def kl_divergence(self, kde, size=1000):
@@ -55,12 +64,15 @@ class MultimodalTestDistribution(object):
     def __call__(self, x):
         return self.logpdf(x)
 
+
 # Check the KDE proposals
 def check_kde_estimate(kde, test_dist, kl_thresh=0.02):
     D = test_dist.kl_divergence(kde)
-    assert D < kl_thresh, \
-        ("KDE is inconsistent with test distribution.  KL divergence {0:g} is above " \
-         "the threshold {1:g}").format(D, kl_thresh)
+    assert D < kl_thresh, (
+        "KDE is inconsistent with test distribution.  KL divergence {0:g} is above "
+        "the threshold {1:g}"
+    ).format(D, kl_thresh)
+
 
 def check_kde_normalization(kde, thresh=1e-5):
     x = np.linspace(0, 1, 100)
@@ -69,12 +81,15 @@ def check_kde_normalization(kde, thresh=1e-5):
 
     pdf = np.exp(np.reshape(kde(positions), X.shape))
     prob = np.trapz(np.trapz(pdf, x), x)
-    assert np.abs(1. - prob) < thresh, \
-        "KDE not properly normalized.  KDE found to integrate to {:.7f}".format(prob)
+    assert (
+        np.abs(1.0 - prob) < thresh
+    ), "KDE not properly normalized.  KDE found to integrate to {:.7f}".format(prob)
+
 
 def check_kde(kde, test_dist):
     check_kde_normalization(kde)
     check_kde_estimate(kde, test_dist)
+
 
 def test_base_kde():
     nmodes = 1
@@ -83,12 +98,14 @@ def test_base_kde():
     kde = KDE(training_pts)
     check_kde(kde, test_dist)
 
+
 def test_clustered_kde():
     nmodes = 3
     test_dist = MultimodalTestDistribution(nmodes=nmodes)
     training_pts = test_dist.draw()
     kde = ClusteredKDE(training_pts, k=nmodes)
     check_kde(kde, test_dist)
+
 
 def test_optimized_kde():
     nmodes = 5
@@ -97,10 +114,12 @@ def test_optimized_kde():
     kde = optimized_kde(training_pts)
     check_kde(kde, test_dist)
 
+
 # Check the sampler
 
 log_threshold = -3
 std_threshold = 3
+
 
 class TestSampler:
     def setUp(self):
@@ -122,17 +141,25 @@ class TestSampler:
         if update_interval is None:
             update_interval = self.update_interval
 
-        for i in self.sampler.sample(p0, iterations=nsteps, update_interval=update_interval):
+        for i in self.sampler.sample(
+            p0, iterations=nsteps, update_interval=update_interval
+        ):
             pass
 
         p = self.sampler.chain[-1]
         mode_sel = [np.all(p < self.split, axis=1), np.all(p > self.split, axis=1)]
-        count_std = self.nwalkers * 1/self.nmodes * (1 - 1/self.nmodes)
+        count_std = self.nwalkers * 1 / self.nmodes * (1 - 1 / self.nmodes)
 
         for mean, sel in zip(self.target.means, mode_sel):
-            assert np.abs(np.count_nonzero(sel) - self.nwalkers/self.nmodes) < std_threshold * count_std
-            assert np.all((np.mean(p[sel], axis=0) - mean) ** 2 < 10. ** log_threshold)
-            assert np.all((np.cov(p[sel], rowvar=0) - self.target.cov) ** 2 < 10. ** log_threshold)
+            assert (
+                np.abs(np.count_nonzero(sel) - self.nwalkers / self.nmodes)
+                < std_threshold * count_std
+            )
+            assert np.all((np.mean(p[sel], axis=0) - mean) ** 2 < 10.0 ** log_threshold)
+            assert np.all(
+                (np.cov(p[sel], rowvar=0) - self.target.cov) ** 2
+                < 10.0 ** log_threshold
+            )
 
         # Check marginal likelihood estimate
         lnZ, dlnZ = self.sampler.ln_ev(self.nwalkers)
@@ -157,10 +184,15 @@ class TestSampler:
         self.check_sampling()
 
         blobs = np.array(self.sampler.blobs)
-        assert (self.sampler.chain.shape == (self.nsteps, self.nwalkers, self.ndim)
-                and blobs.shape == (self.nsteps, self.nwalkers)), \
-                    "You broke the blob!"
+        assert self.sampler.chain.shape == (
+            self.nsteps,
+            self.nwalkers,
+            self.ndim,
+        ) and blobs.shape == (self.nsteps, self.nwalkers), "You broke the blob!"
 
         # Make sure some blobs were updated
-        assert len(np.unique(blobs)) > self.nwalkers, \
-            "blobs repeated: {} != {} {}".format(len(np.unique(blobs)), len(blobs), blobs.shape)
+        assert (
+            len(np.unique(blobs)) > self.nwalkers
+        ), "blobs repeated: {} != {} {}".format(
+            len(np.unique(blobs)), len(blobs), blobs.shape
+        )

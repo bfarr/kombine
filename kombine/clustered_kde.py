@@ -4,19 +4,20 @@
 The kernel density estimators.
 """
 
-from __future__ import (division, print_function, absolute_import, unicode_literals)
+from __future__ import division, print_function, absolute_import, unicode_literals
 
 import numpy as np
 import numpy.ma as ma
 from scipy import linalg as la
 from scipy.cluster.vq import kmeans, vq
+
 try:
     from scipy.special import logsumexp
 except ImportError:  # scipy < 1.0.0
     from scipy.misc import logsumexp
 
 # Avoid log(0) warnings when weights go to 0
-np.seterr(divide='ignore')
+np.seterr(divide="ignore")
 
 
 def optimized_kde(data, pool=None, kde=None, max_samples=None, **kwargs):
@@ -106,6 +107,7 @@ class ClusteredKDE(object):
     :param k:
         The number of clusters for k-means clustering.
     """
+
     def __init__(self, data, k=1):
         self._data = data
         self._nclusters = k
@@ -119,8 +121,9 @@ class ClusteredKDE(object):
         self._assignments, _ = vq(white_data, self.centroids)
 
         self._kdes = [KDE(self.data[self.assignments == c]) for c in range(k)]
-        self._logweights = np.log([np.count_nonzero(self.assignments == c)/self.size
-                                   for c in range(k)])
+        self._logweights = np.log(
+            [np.count_nonzero(self.assignments == c) / self.size for c in range(k)]
+        )
 
     def draw(self, size=1):
         """Draw `size` samples from the KDE."""
@@ -137,8 +140,10 @@ class ClusteredKDE(object):
 
     def logpdf(self, pts, pool=None):
         """Evaluate the logpdf of the KDE at `pts`."""
-        logpdfs = [logweight + kde(pts, pool=pool)
-                   for logweight, kde in zip(self._logweights, self._kdes)]
+        logpdfs = [
+            logweight + kde(pts, pool=pool)
+            for logweight, kde in zip(self._logweights, self._kdes)
+        ]
         if len(pts.shape) == 1:
             return logsumexp(logpdfs)
         else:
@@ -146,7 +151,7 @@ class ClusteredKDE(object):
 
     def _whiten(self, data):
         """Whiten `data`, probably before running k-means."""
-        return (data - self._mean)/self._std
+        return (data - self._mean) / self._std
 
     def _color(self, data):
         """Recolor `data`, reversing :meth:`_whiten`."""
@@ -176,9 +181,9 @@ class ClusteredKDE(object):
         nparams += self.nclusters - 1
 
         # Separate kernel covariances for each cluster
-        nparams += self.nclusters * (self.ndim + 1) * self.ndim/2
+        nparams += self.nclusters * (self.ndim + 1) * self.ndim / 2
 
-        return log_l - nparams/2 * np.log(self.size)
+        return log_l - nparams / 2 * np.log(self.size)
 
     @property
     def data(self):
@@ -226,6 +231,7 @@ class KDE(object):
         An `(N, ndim)`-shaped array, containing `N` samples from the target distribution.
 
     """
+
     def __init__(self, data):
         self._data = np.atleast_2d(data)
 
@@ -246,7 +252,7 @@ class KDE(object):
 
         # store transformation variables for drawing random values
         alphas = np.std(data, axis=0)
-        ms = 1./alphas
+        ms = 1.0 / alphas
         m_i, m_j = np.meshgrid(ms, ms)
         ms = m_i * m_j
         self._draw_cov = ms * self._kernel_cov
@@ -266,14 +272,17 @@ class KDE(object):
         Also store Cholesky decomposition for later.
         """
         if self.size > 0 and self._cov is not None:
-            self._kernel_cov = self._cov * self.size ** (-2/(self.ndim + 4))
+            self._kernel_cov = self._cov * self.size ** (-2 / (self.ndim + 4))
 
             # Used to evaluate PDF with cho_solve()
             self._cho_factor = la.cho_factor(self._kernel_cov)
 
             # Make sure the estimated PDF integrates to 1.0
-            self._lognorm = self.ndim/2 * np.log(2*np.pi) + np.log(self.size) +\
-                np.sum(np.log(np.diag(self._cho_factor[0])))
+            self._lognorm = (
+                self.ndim / 2 * np.log(2 * np.pi)
+                + np.log(self.size)
+                + np.sum(np.log(np.diag(self._cho_factor[0])))
+            )
 
         else:
             self._lognorm = -np.inf
@@ -287,8 +296,9 @@ class KDE(object):
             return []
 
         # Draw vanilla samples from a zero-mean multivariate Gaussian
-        draws = self._scale_fac * np.random.multivariate_normal(np.zeros(self.ndim),
-                                                                self._draw_cov, size=size)
+        draws = self._scale_fac * np.random.multivariate_normal(
+            np.zeros(self.ndim), self._draw_cov, size=size
+        )
 
         # Pick N random kernels as means
         kernels = np.random.randint(0, self.size, size)
@@ -373,6 +383,7 @@ class TransdimensionalKDE(object):
         parameter space. If a KDE is supplied and adding the samples from `data` will go over this,
         old samples are thinned by factors of two until under the limit in each parameter space.
     """
+
     def __init__(self, data, kde=None, max_samples=None, pool=None):
         npts_new, max_ndim = data.shape
         self._max_ndim = max_ndim
@@ -393,12 +404,14 @@ class TransdimensionalKDE(object):
 
             # Determine weights from only the new samples
             npts_subspace = np.count_nonzero(subspace)
-            weight = npts_subspace/npts_new
+            weight = npts_subspace / npts_new
             weights.append(weight)
 
             fixd_data = data[subspace]
             if npts_subspace > 0:
-                fixd_data = np.asarray(fixd_data[~fixd_data.mask].reshape((npts_subspace, -1)))
+                fixd_data = np.asarray(
+                    fixd_data[~fixd_data.mask].reshape((npts_subspace, -1))
+                )
 
             old_kde = None
             if kde is not None:
@@ -414,7 +427,7 @@ class TransdimensionalKDE(object):
         """
         if spaces is not None:
             if len(spaces) != size:
-                raise ValueError('Sample size inconsistent with number of spaces saved')
+                raise ValueError("Sample size inconsistent with number of spaces saved")
             space_inds = np.empty(size)
             for space_id, space in enumerate(self.spaces):
                 subspace = np.all(spaces == space, axis=1)
@@ -431,16 +444,16 @@ class TransdimensionalKDE(object):
             n_fixedd = np.count_nonzero(sel)
             if n_fixedd > 0:
                 # Populate only the valid entries for this parameter space
-                draws[np.ix_(sel, self._spaces[space_id])] = self.kdes[space_id].draw(n_fixedd)
+                draws[np.ix_(sel, self._spaces[space_id])] = self.kdes[space_id].draw(
+                    n_fixedd
+                )
 
         return draws
 
     def logpdf(self, pts, pool=None):
         """Evaluate the log-transdimensional-pdf at `pts` as estimated by the KDE."""
         logpdfs = []
-        for logweight, space, kde in zip(self._logweights,
-                                         self.spaces,
-                                         self.kdes):
+        for logweight, space, kde in zip(self._logweights, self.spaces, self.kdes):
             # Calculate the probability for each parameter space individually
             if np.all(space == ~pts.mask) and np.isfinite(logweight):
                 logpdfs.append(logweight + kde(pts[space], pool=pool))
@@ -483,7 +496,7 @@ def _evaluate_point_logpdf(args):
     diff *= tdiff
 
     # Work in the log to avoid large numbers
-    return logsumexp(-np.sum(diff, axis=1)/2)
+    return logsumexp(-np.sum(diff, axis=1) / 2)
 
 
 def oas_cov(pts):

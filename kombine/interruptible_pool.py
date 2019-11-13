@@ -26,6 +26,7 @@ def _initializer_wrapper(initializer, *args):
     if initializer is not None:
         initializer(*args)
 
+
 class Pool(MPPool):
     """
     A modified :class:`multiprocessing.pool.Pool` that handles :exc:`KeyboardInterrupts` in the
@@ -43,6 +44,7 @@ class Pool(MPPool):
     :param kwargs: (optional)
         Extra arguments. Python 2.7 supports a `maxtasksperchild` parameter.
     """
+
     def __init__(self, processes=None, initializer=None, initargs=(), **kwargs):
         self._wait_timeout = 3600
 
