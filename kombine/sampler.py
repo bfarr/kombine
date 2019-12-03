@@ -142,12 +142,11 @@ class Sampler(object):
 
         :param lnpost0: (optional)
             The list of log posterior probabilities for the walkers at positions `p0`. If ``lnpost0
-            is None``, the initial values are calculated. It should have the shape `(nwalkers,
-            ndim)`.
+            is None``, the initial values are calculated. It should have the shape `(nwalkers, )`.
 
         :param lnprop0: (optional)
             List of log proposal densities for walkers at positions `p0`. If ``lnprop0 is None``,
-            the initial values are calculated. It should have the shape `(nwalkers, ndim)`.
+            the initial values are calculated. It should have the shape `(nwalkers, )`.
 
         :param blob0: (optional)
             The list of blob data for walkers at positions `p0`.
@@ -177,10 +176,10 @@ class Sampler(object):
             * ``p`` - A list of the current walker positions with shape `(nwalkers, ndim)`.
 
             * ``lnpost`` - Array of log posterior probabilities for walkers at positions `p`; has
-              shape `(nwalkers, ndim)`.
+              shape `(nwalkers, )`.
 
             * ``lnprop`` - Array of log proposal densities for walkers at positions `p`; has shape
-              `(nwalkers, ndim)`.
+              `(nwalkers, )`.
 
             * ``blob`` - (if `lnprobfn` returns blobs) The list of blob data for the walkers at
               positions `p`.
@@ -292,12 +291,11 @@ class Sampler(object):
 
         :param lnpost0: (optional)
             The list of log posterior probabilities for the walkers at positions `p0`. If ``lnpost0
-            is None``, the initial values are calculated. It should have the shape `(nwalkers,
-            ndim)`.
+            is None``, the initial values are calculated. It should have the shape `(nwalkers, )`.
 
         :param lnprop0: (optional)
             List of log proposal densities for walkers at positions `p0`. If ``lnprop0 is None``,
-            the initial values are calculated. It should have the shape `(nwalkers, ndim)`.
+            the initial values are calculated. It should have the shape `(nwalkers, )`.
 
         :param blob0: (optional)
             The list of blob data for walkers at positions `p0`.
@@ -338,10 +336,10 @@ class Sampler(object):
             * ``p`` - An array of current walker positions with shape `(nwalkers, ndim)`.
 
             * ``lnpost`` - The list of log posterior probabilities for the walkers at positions
-              ``p``, with shape `(nwalkers, ndim)`.
+              ``p``, with shape `(nwalkers, )`.
 
             * ``lnprop`` - The list of log proposal densities for the walkers at positions `p`, with
-              shape `(nwalkers, ndim)`.
+              shape `(nwalkers, )`.
 
             * ``blob`` - (if `lnprobfn` returns blobs) The list of blob data for the walkers at
               positions `p`.
@@ -771,12 +769,11 @@ class Sampler(object):
 
         :param lnpost0: (optional)
             The list of log posterior probabilities for the walkers at positions `p0`. If ``lnpost0
-            is None``, the initial values are calculated. It should have the shape `(nwalkers,
-            ndim)`.
+            is None``, the initial values are calculated. It should have the shape `(nwalkers, )`.
 
         :param lnprop0: (optional)
             List of log proposal densities for walkers at positions `p0`. If ``lnprop0 is None``,
-            the initial values are calculated. It should have the shape `(nwalkers, ndim)`.
+            the initial values are calculated. It should have the shape `(nwalkers, )`.
 
         :param blob0: (optional)
             The list of blob data for walkers at positions `p0`.
@@ -790,10 +787,10 @@ class Sampler(object):
             * ``p`` - An array of current walker positions with shape `(nwalkers, ndim)`.
 
             * ``lnpost`` - The list of log posterior probabilities for the walkers at positions
-              ``p``, with shape `(nwalkers, ndim)`.
+              ``p``, with shape `(nwalkers, )`.
 
             * ``lnprop`` - The list of log proposal densities for the walkers at positions `p`, with
-              shape `(nwalkers, ndim)`.
+              shape `(nwalkers, )`.
 
             * ``blob`` - (if `lnprobfn` returns blobs) The list of blob data for the walkers at
               positions `p`.
