@@ -8,4 +8,6 @@ from __future__ import (
     unicode_literals,
 )
 
+from .sampler import *
+
 __version__ = "0.8.4"

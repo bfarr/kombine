@@ -12,3 +12,4 @@ dist
 notebooks/
 .ipynb_checkpoints/
 env/
+.idea/*
