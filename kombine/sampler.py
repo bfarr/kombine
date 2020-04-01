@@ -105,7 +105,7 @@ class Sampler(object):
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
-                 processes=None, pool=None, args=[], **kwargs):
+                 processes=None, pool=None, mpi=False, args=[]):
         self.nwalkers = nwalkers
         self.dim = ndim
         self._kde = None
@@ -118,7 +118,7 @@ class Sampler(object):
 
         self.iterations = 0
         self.stored_iterations = 0
-
+        self.mpi = mpi
         self.processes = processes
         if processes is None and pool is not None:
             raise ValueError("Please provide the number of processes if "
@@ -128,7 +128,7 @@ class Sampler(object):
             self._pool = pool
         else:
             self._managing_pool = True
-            self._pool = choose_pool(processes, **kwargs)
+            self._pool = choose_pool(processes, mpi=mpi)
 
         if not hasattr(self._pool, 'map'):
             raise AttributeError("Pool object must have a map() method.")
@@ -532,7 +532,7 @@ class Sampler(object):
                 # If the sampler is handling the pool, reset it automatically
                 if self._managing_pool:
                     self._pool.close()
-                    self._pool = choose_pool(self.processes, **kwargs)
+                    self._pool = choose_pool(self.processes, mpi=self.mpi)
 
                 raise
 
@@ -867,7 +867,7 @@ class Sampler(object):
 
         if self._kde is not None:
             if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
-                results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p0))
+                results = list(self._pool.map(self._get_wrapper(), p0))
 
                 if lnpost0 is None:
                     lnpost0 = np.array([r[0] for r in results])
