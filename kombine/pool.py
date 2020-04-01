@@ -88,6 +88,12 @@ class SerialPool(object):
         return results
 
 
+"""
+This is implemented same as in https://github.com/gwastro/pycbc/pycbc/pool.py
+
+"""
+
+
 def _dummy_broadcast(self, f, args):
     self.map(f, [args] * self.size)
 
