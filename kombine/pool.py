@@ -11,8 +11,7 @@ which was an adaptation of a method written by John Reese, shared as
     * `<https://github.com/jreese/multiprocessing-keyboardinterrupt/>`_
 """
 
-import signal
-import functools
+import signal, types, atexit, functools
 from multiprocessing.pool import Pool as MPPool
 from multiprocessing import TimeoutError
 
@@ -25,6 +24,7 @@ def _initializer_wrapper(initializer, *args):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     if initializer is not None:
         initializer(*args)
+
 
 class Pool(MPPool):
     """
@@ -72,3 +72,38 @@ class Pool(MPPool):
                 self.terminate()
                 self.join()
                 raise
+
+
+class SerialPool(object):
+    def close(self):
+        return
+
+    def map(self, function, tasks, callback=None):
+        results = []
+        for task in tasks:
+            result = function(task)
+            if callback is not None:
+                callback(result)
+            results.append(result)
+        return results
+
+
+def _dummy_broadcast(self, f, args):
+    self.map(f, [args] * self.size)
+
+
+def choose_pool(processes, mpi=False):
+    if mpi:
+        try:
+            import schwimmbad
+            pool = schwimmbad.choose_pool(mpi=mpi, processes=processes)
+            pool.broadcast = types.MethodType(_dummy_broadcast, pool)
+            atexit.register(pool.close)
+        except ImportError:
+            raise ValueError("Failed to start up an MPI pool, "
+                             "install mpi4py / schwimmbadd")
+    elif processes == 1:
+        pool = SerialPool()
+    else:
+        pool = Pool(processes)
+    return pool
