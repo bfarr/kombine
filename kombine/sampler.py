@@ -6,7 +6,6 @@ A kernel-density-based, embarrassingly parallel ensemble sampler.
 
 from __future__ import (division, print_function, absolute_import, unicode_literals)
 from .pool import choose_pool
-import tqdm
 import numpy as np
 import numpy.ma as ma
 from scipy.stats import chisquare
@@ -446,10 +445,13 @@ class Sampler(object):
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
 
+        pbar = range(iterations)
         if progress and iterations > 1:
-            pbar = tqdm.tqdm(range(iterations))
-        else:
-            pbar = range(iterations)
+            try:
+                import tqdm
+                pbar = tqdm.tqdm(range(iterations))
+            except ImportError:
+                print("Must have tqdm installed on machine to print progress bars")
         for i in pbar:
             try:
                 if freeze_transd and spaces is None:
