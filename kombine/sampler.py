@@ -65,7 +65,6 @@ def _set_global_lnprob_wrapper(wrapper_instance):
 def _get_lnprob_from_wrapper(p):
     return _lnprob_wrapper.lnprobs(p)
 
-
 def _update_wrapper_kde(kde):
     _lnprob_wrapper.update_kde(kde)
 
@@ -154,6 +153,7 @@ class Sampler(object):
         # the data explicitly, which is much faster
         if hasattr(self._pool, 'broadcast'):
             wrapper = _GetLnProbWrapper(self._get_lnpost, self._kde,
+
                                         *self._lnpost_args)
             self._pool.broadcast(_set_global_lnprob_wrapper, wrapper)
 
@@ -163,6 +163,7 @@ class Sampler(object):
             return _get_lnprob_from_wrapper
         else:
             return _GetLnProbWrapper(self._get_lnpost, self._kde,
+
                                      *self._lnpost_args)
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
@@ -406,7 +407,7 @@ class Sampler(object):
 
         # Build a proposal if one doesn't already exist
         if kde is not None:
-            self._kde = kde
+            self.set_kde(kde)
         elif self._kde is None:
             self.update_proposal(p, max_samples=self._kde_size, **kwargs)
             lnprop0 = self._kde(p)
@@ -463,7 +464,6 @@ class Sampler(object):
                 # at the proposed locations
                 try:
                     results = list(self._pool.map(self._get_wrapper(), p_p))
-
                     lnpost_p = np.array([r[0] for r in results])
                     lnprop_p = np.array([r[1] for r in results])
                     try:
@@ -630,11 +630,19 @@ class Sampler(object):
         self._updates.append(self.iterations)
 
         if self._transd:
-            self._kde = TransdimensionalKDE(p, pool=self._pool, kde=self._kde,
-                                            max_samples=self._kde_size, **kwargs)
+            self.set_kde(TransdimensionalKDE(p, pool=self._pool, kde=self._kde,
+                                            max_samples=self._kde_size, **kwargs))
         else:
-            self._kde = optimized_kde(p, pool=self._pool, kde=self._kde,
-                                      max_samples=self._kde_size, **kwargs)
+            self.set_kde(optimized_kde(p, pool=self._pool, kde=self._kde,
+                                      max_samples=self._kde_size, **kwargs))
+
+
+    def set_kde(self, kde):
+        """Sets self's kde and re-creates the pool to use it."""
+        self._kde = kde
+
+        if hasattr(self._pool, 'broadcast'):
+            self._pool.broadcast(_update_wrapper_kde, kde)
 
     @property
     def pool(self):
@@ -849,7 +857,6 @@ class Sampler(object):
               positions `p`.
         """
 
-
         if p0 is None:
             if self._last_run_mcmc_result is None:
                 try:
@@ -870,7 +877,6 @@ class Sampler(object):
         if self._kde is not None:
             if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
                 results = list(self._pool.map(self._get_wrapper(), p0))
-
                 if lnpost0 is None:
                     lnpost0 = np.array([r[0] for r in results])
                 if lnprop0 is None:
