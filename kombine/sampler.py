@@ -5,16 +5,12 @@ A kernel-density-based, embarrassingly parallel ensemble sampler.
 """
 
 from __future__ import (division, print_function, absolute_import, unicode_literals)
-
-from .interruptible_pool import Pool
-from .serialpool import SerialPool
-
+from .pool import choose_pool
 import numpy as np
 import numpy.ma as ma
-
 from scipy.stats import chisquare
-
 from .clustered_kde import optimized_kde, TransdimensionalKDE
+
 
 class _GetLnProbWrapper(object):
     """Convenience class for evaluating multiple probability densities at a single point."""
@@ -50,8 +46,10 @@ class _GetLnProbWrapper(object):
 
     __call__ = lnprobs
 
-import time
+
 _lnprob_wrapper = None
+
+
 def _set_global_lnprob_wrapper(wrapper_instance):
     """Sets `_lnprob_wrapper` to a global variable equal to the provided
     instance of `_GetLnProbWrapper`. Making the wrapper a global variable
@@ -63,11 +61,13 @@ def _set_global_lnprob_wrapper(wrapper_instance):
     global _lnprob_wrapper
     _lnprob_wrapper = wrapper_instance
 
+
 def _get_lnprob_from_wrapper(p):
     return _lnprob_wrapper.lnprobs(p)
 
 def _update_wrapper_kde(kde):
     _lnprob_wrapper.update_kde(kde)
+
 
 class Sampler(object):
     """
@@ -103,7 +103,7 @@ class Sampler(object):
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
-                 processes=None, pool=None, args=[]):
+                 processes=None, pool=None, mpi=False, args=[]):
         self.nwalkers = nwalkers
         self.dim = ndim
         self._kde = None
@@ -116,25 +116,20 @@ class Sampler(object):
 
         self.iterations = 0
         self.stored_iterations = 0
-
+        self.mpi = mpi
         self.processes = processes
         if processes is None and pool is not None:
             raise ValueError("Please provide the number of processes if "
                              " if also providing a pool instance.")
-
         self._managing_pool = False
         if pool is not None:
             self._pool = pool
-
-        elif self.processes == 1 or self.processes is None:
-            self._pool = SerialPool()
-            self.processes = 1
-
         else:
             self._managing_pool = True
+            self._pool = choose_pool(processes, mpi=mpi)
 
-            # create a multiprocessing pool
-            self._pool = Pool(self.processes)
+        if not hasattr(self._pool, 'map'):
+            raise AttributeError("Pool object must have a map() method.")
 
         self._transd = transd
         if self._transd:
@@ -157,7 +152,8 @@ class Sampler(object):
         # If the pool can guarantee a call to all processes we can update
         # the data explicitly, which is much faster
         if hasattr(self._pool, 'broadcast'):
-            wrapper = _GetLnProbWrapper(self._get_lnpost, self._kde, 
+            wrapper = _GetLnProbWrapper(self._get_lnpost, self._kde,
+
                                         *self._lnpost_args)
             self._pool.broadcast(_set_global_lnprob_wrapper, wrapper)
 
@@ -166,12 +162,13 @@ class Sampler(object):
         if hasattr(self._pool, 'broadcast'):
             return _get_lnprob_from_wrapper
         else:
-            return _GetLnProbWrapper(self._get_lnpost, self._kde, 
+            return _GetLnProbWrapper(self._get_lnpost, self._kde,
+
                                      *self._lnpost_args)
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                test_steps=16, critical_pval=0.05, max_steps=None,
-               verbose=False, callback=None, **kwargs):
+               verbose=False, callback=None, progress=False, **kwargs):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
         splitting acceptances in half and checking for statistical consistency.  This isn't
@@ -241,7 +238,7 @@ class Sampler(object):
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
-
+        sampling_ct = 0
         step_size = 2
         while step_size <= test_steps:
             # Update the proposal
@@ -281,9 +278,16 @@ class Sampler(object):
 
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
-
+            sampling_ct += 1
+            if progress and verbose:
+                if max_iter:
+                    print("Time {} running mcmc during burnin with {}/{} Iterations and test_interval = {}:".format(
+                        sampling_ct, self.iterations, max_iter, test_interval))
+                else:
+                    print("Time {} running mcmc during burnin with test_interval = {}:".format(
+                        sampling_ct, test_interval))
             results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
-                                    freeze_transd=freeze_transd, spaces=self._burnin_spaces,
+                                    freeze_transd=freeze_transd, spaces=self._burnin_spaces, progress=progress,
                                     **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
@@ -322,7 +326,7 @@ class Sampler(object):
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                iterations=1, kde=None, update_interval=None, kde_size=None,
-               freeze_transd=False, spaces=None, storechain=True, **kwargs):
+               freeze_transd=False, spaces=None, storechain=True, progress=False, **kwargs):
         """
         Advance the ensemble `iterations` steps as a generator.
 
@@ -442,7 +446,14 @@ class Sampler(object):
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
 
-        for i in range(int(iterations)):
+        pbar = range(iterations)
+        if progress and iterations > 1:
+            try:
+                import tqdm
+                pbar = tqdm.tqdm(range(iterations))
+            except ImportError:
+                print("Must have tqdm installed on machine to print progress bars")
+        for i in pbar:
             try:
                 if freeze_transd and spaces is None:
                     spaces = ~p.mask
@@ -522,8 +533,8 @@ class Sampler(object):
 
                 # If the sampler is handling the pool, reset it automatically
                 if self._managing_pool:
-                    self.pool.close()
-                    self.pool = Pool(self.processes)
+                    self._pool.close()
+                    self._pool = choose_pool(self.processes, mpi=self.mpi)
 
                 raise
 
@@ -539,7 +550,6 @@ class Sampler(object):
         """
 
         pts = self.draw(ndraws)
-
         results = list(self._pool.map(self._get_wrapper(), pts))
         lnpost = np.array([r[0] for r in results])
         lnprop = np.array([r[1] for r in results])

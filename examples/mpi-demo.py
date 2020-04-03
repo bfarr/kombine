@@ -12,20 +12,12 @@ from __future__ import division, print_function
 
 __author__ = "adrn <adrn@astro.columbia.edu>"
 
-# Standard library
-import sys
 
 # Third-party
 import kombine
 import numpy as np
 from scipy.stats import multivariate_normal
 
-try:
-    from mpipool import MPIPool
-except ImportError:
-    raise ImportError("Both mpipool (https://github.com/dfm/mpipool/) and mpi4py "
-                      "are required for MPI support and this example, along with "
-                      "a working installation of openMPI.")
 
 class Model(object):
     def __init__(self, mean, cov):
@@ -47,22 +39,9 @@ cov = A*A.T + ndim*np.eye(ndim)
 # create an ND Gaussian model
 model = Model(mean, cov)
 
-# define an MPI pool
-pool = MPIPool()
-
-# # Make sure the thread we're running on is the master
-if not pool.is_master():
-    pool.wait()
-    sys.exit(0)
-
 nwalkers = 500
-sampler = kombine.Sampler(nwalkers, ndim, model, pool=pool)
+sampler = kombine.Sampler(nwalkers, ndim, model, mpi=True)
 
 p0 = np.random.uniform(-10, 10, size=(nwalkers, ndim))
 p, post, q = sampler.burnin(p0)
 p, post, q = sampler.run_mcmc(100)
-
-# close the MPI poll
-pool.close()
-
-sys.exit(0)
