@@ -5,16 +5,12 @@ A kernel-density-based, embarrassingly parallel ensemble sampler.
 """
 
 from __future__ import (division, print_function, absolute_import, unicode_literals)
-
-from .interruptible_pool import Pool
-from .serialpool import SerialPool
-
+from .pool import choose_pool
 import numpy as np
 import numpy.ma as ma
-
 from scipy.stats import chisquare
-
 from .clustered_kde import optimized_kde, TransdimensionalKDE
+
 
 class _GetLnProbWrapper(object):
     """Convenience class for evaluating multiple probability densities at a single point."""
@@ -22,6 +18,9 @@ class _GetLnProbWrapper(object):
         self.lnpost = lnpost
         self.kde = kde
         self.args = args
+
+    def update_kde(self, kde):
+        self.kde = kde
 
     def lnprobs(self, p):
         """
@@ -46,6 +45,29 @@ class _GetLnProbWrapper(object):
             return lnpost, kde
 
     __call__ = lnprobs
+
+
+_lnprob_wrapper = None
+
+
+def _set_global_lnprob_wrapper(wrapper_instance):
+    """Sets `_lnprob_wrapper` to a global variable equal to the provided
+    instance of `_GetLnProbWrapper`. Making the wrapper a global variable
+    allows chilren processes to access their own copy of the wrapper without
+    needing to push out the same data on every call. For this to work it must
+    be done *before* a multiprocessing pool is initialized. See
+    http://stackoverflow.com/a/10118250 for details.
+    """
+    global _lnprob_wrapper
+    _lnprob_wrapper = wrapper_instance
+
+
+def _get_lnprob_from_wrapper(p):
+    return _lnprob_wrapper.lnprobs(p)
+
+def _update_wrapper_kde(kde):
+    _lnprob_wrapper.update_kde(kde)
+
 
 class Sampler(object):
     """
@@ -81,7 +103,7 @@ class Sampler(object):
 
     """
     def __init__(self, nwalkers, ndim, lnpostfn, transd=False,
-                 processes=None, pool=None, args=[]):
+                 processes=None, pool=None, mpi=False, args=[]):
         self.nwalkers = nwalkers
         self.dim = ndim
         self._kde = None
@@ -94,23 +116,19 @@ class Sampler(object):
 
         self.iterations = 0
         self.stored_iterations = 0
-
+        self.mpi = mpi
         self.processes = processes
-
+        if processes is None and pool is not None:
+            raise ValueError("Please provide the number of processes if "
+                             " if also providing a pool instance.")
         self._managing_pool = False
         if pool is not None:
-            self.pool = pool
-
-        elif self.processes == 1:
-            self.pool = SerialPool()
-
+            self._pool = pool
         else:
             self._managing_pool = True
+            self._pool = choose_pool(processes, mpi=mpi)
 
-            # create a multiprocessing pool
-            self.pool = Pool(self.processes)
-
-        if not hasattr(self.pool, 'map'):
+        if not hasattr(self._pool, 'map'):
             raise AttributeError("Pool object must have a map() method.")
 
         self._transd = transd
@@ -127,10 +145,30 @@ class Sampler(object):
         self._last_run_mcmc_result = None
         self._burnin_spaces = None
         self._failed_p = None
+        self._set_wrapper()
+
+    def _set_wrapper(self):
+        """ Determine the lnprob wrapper """
+        # If the pool can guarantee a call to all processes we can update
+        # the data explicitly, which is much faster
+        if hasattr(self._pool, 'broadcast'):
+            wrapper = _GetLnProbWrapper(self._get_lnpost, self._kde,
+
+                                        *self._lnpost_args)
+            self._pool.broadcast(_set_global_lnprob_wrapper, wrapper)
+
+    def _get_wrapper(self):
+        """ Retunr the lnprob wrapper function call """
+        if hasattr(self._pool, 'broadcast'):
+            return _get_lnprob_from_wrapper
+        else:
+            return _GetLnProbWrapper(self._get_lnpost, self._kde,
+
+                                     *self._lnpost_args)
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                test_steps=16, critical_pval=0.05, max_steps=None,
-               verbose=False, callback=None, **kwargs):
+               verbose=False, callback=None, progress=False, **kwargs):
         """
         Evolve an ensemble until the acceptance rate becomes roughly constant.  This is done by
         splitting acceptances in half and checking for statistical consistency.  This isn't
@@ -200,7 +238,7 @@ class Sampler(object):
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
-
+        sampling_ct = 0
         step_size = 2
         while step_size <= test_steps:
             # Update the proposal
@@ -240,9 +278,16 @@ class Sampler(object):
 
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
-
+            sampling_ct += 1
+            if progress and verbose:
+                if max_iter:
+                    print("Time {} running mcmc during burnin with {}/{} Iterations and test_interval = {}:".format(
+                        sampling_ct, self.iterations, max_iter, test_interval))
+                else:
+                    print("Time {} running mcmc during burnin with test_interval = {}:".format(
+                        sampling_ct, test_interval))
             results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
-                                    freeze_transd=freeze_transd, spaces=self._burnin_spaces,
+                                    freeze_transd=freeze_transd, spaces=self._burnin_spaces, progress=progress,
                                     **kwargs)
             try:
                 p, lnpost, lnprop, blob = results
@@ -281,7 +326,7 @@ class Sampler(object):
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                iterations=1, kde=None, update_interval=None, kde_size=None,
-               freeze_transd=False, spaces=None, storechain=True, **kwargs):
+               freeze_transd=False, spaces=None, storechain=True, progress=False, **kwargs):
         """
         Advance the ensemble `iterations` steps as a generator.
 
@@ -357,14 +402,12 @@ class Sampler(object):
                 #   Operations with masked arrays can be slow.
                 p = np.array(p0, copy=True)
 
-        m = self.pool.map
-
         if kde_size:
             self._kde_size = kde_size
 
         # Build a proposal if one doesn't already exist
         if kde is not None:
-            self._kde = kde
+            self.set_kde(kde)
         elif self._kde is None:
             self.update_proposal(p, max_samples=self._kde_size, **kwargs)
             lnprop0 = self._kde(p)
@@ -374,7 +417,7 @@ class Sampler(object):
         blob = blob0
 
         if lnpost is None or lnprop is None:
-            results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p))
+            results = list(self._pool.map(self._get_wrapper(), p))
             lnpost = np.array([r[0] for r in results]) if lnpost is None else lnpost
             lnprop = np.array([r[1] for r in results]) if lnprop is None else lnprop
 
@@ -403,7 +446,14 @@ class Sampler(object):
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
 
-        for i in range(int(iterations)):
+        pbar = range(iterations)
+        if progress and iterations > 1:
+            try:
+                import tqdm
+                pbar = tqdm.tqdm(range(iterations))
+            except ImportError:
+                print("Must have tqdm installed on machine to print progress bars")
+        for i in pbar:
             try:
                 if freeze_transd and spaces is None:
                     spaces = ~p.mask
@@ -413,9 +463,7 @@ class Sampler(object):
                 # Calculate the posterior probability and proposal density
                 # at the proposed locations
                 try:
-                    results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde,
-                                                       *self._lnpost_args), p_p))
-
+                    results = list(self._pool.map(self._get_wrapper(), p_p))
                     lnpost_p = np.array([r[0] for r in results])
                     lnprop_p = np.array([r[1] for r in results])
                     try:
@@ -485,8 +533,8 @@ class Sampler(object):
 
                 # If the sampler is handling the pool, reset it automatically
                 if self._managing_pool:
-                    self.pool.close()
-                    self.pool = Pool(self.processes)
+                    self._pool.close()
+                    self._pool = choose_pool(self.processes, mpi=self.mpi)
 
                 raise
 
@@ -502,10 +550,7 @@ class Sampler(object):
         """
 
         pts = self.draw(ndraws)
-
-        m = self.pool.map
-
-        results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), pts))
+        results = list(self._pool.map(self._get_wrapper(), pts))
         lnpost = np.array([r[0] for r in results])
         lnprop = np.array([r[1] for r in results])
 
@@ -585,11 +630,24 @@ class Sampler(object):
         self._updates.append(self.iterations)
 
         if self._transd:
-            self._kde = TransdimensionalKDE(p, pool=self.pool, kde=self._kde,
-                                            max_samples=self._kde_size, **kwargs)
+            self.set_kde(TransdimensionalKDE(p, pool=self._pool, kde=self._kde,
+                                            max_samples=self._kde_size, **kwargs))
         else:
-            self._kde = optimized_kde(p, pool=self.pool, kde=self._kde,
-                                      max_samples=self._kde_size, **kwargs)
+            self.set_kde(optimized_kde(p, pool=self._pool, kde=self._kde,
+                                      max_samples=self._kde_size, **kwargs))
+
+
+    def set_kde(self, kde):
+        """Sets self's kde and re-creates the pool to use it."""
+        self._kde = kde
+
+        if hasattr(self._pool, 'broadcast'):
+            self._pool.broadcast(_update_wrapper_kde, kde)
+
+    @property
+    def pool(self):
+        """Returns the pool instance."""
+        return self._pool
 
     @property
     def failed_p(self):
@@ -799,8 +857,6 @@ class Sampler(object):
               positions `p`.
         """
 
-        m = self.pool.map
-
         if p0 is None:
             if self._last_run_mcmc_result is None:
                 try:
@@ -820,8 +876,7 @@ class Sampler(object):
 
         if self._kde is not None:
             if self._last_run_mcmc_result is None and (lnpost0 is None or lnprop0 is None):
-                results = list(m(_GetLnProbWrapper(self._get_lnpost, self._kde, *self._lnpost_args), p0))
-
+                results = list(self._pool.map(self._get_wrapper(), p0))
                 if lnpost0 is None:
                     lnpost0 = np.array([r[0] for r in results])
                 if lnprop0 is None:
