@@ -756,7 +756,7 @@ class Sampler(object):
 
         # Use the mean acceptance rate of the last step to set the window
         if window is None:
-            window = 20 * 1//np.mean(self.acceptance[-1])
+            window = 20 * int(1/np.mean(self.acceptance[-1]))
 
         rates = np.empty((self.nwalkers, N - window + 1))
         weights = np.ones(window)/window
