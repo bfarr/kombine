@@ -12,9 +12,10 @@ from scipy.stats import chisquare
 from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 
-def print_fn(iter, test_size, acc, pbar):
-    pbar.set_postfix_str('| single_step_acceptence = {0} | test_stepsize = {1} >= 16'.format(acc,test_size), refresh=False)
-    pbar.update(iter - pbar.n)
+def print_fn(iter, test_size, acc, pbar=None):
+    if pbar is not None:
+        pbar.set_postfix_str('| single_step_acceptence = {0} | test_stepsize = {1} >= 16'.format(acc,test_size), refresh=False)
+        pbar.update(iter - pbar.n)
 
 
 def in_notebook():
