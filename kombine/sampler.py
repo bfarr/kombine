@@ -14,8 +14,7 @@ from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 def dynamic_pbar_update(iter, test_size, acc, pbar=None):
     if pbar is not None:
-        pbar.set_postfix_str('| single_step_acceptence = {0} | test_stepsize = {1} >= 16'.format(acc,test_size),
-                             refresh=False)
+        pbar.set_postfix_str('| Single-Step Acceptence:{0} | Test Stepsize:{1} >= 16'.format(acc, test_size))
         pbar.update(iter - pbar.n)
 
 
@@ -922,10 +921,13 @@ class Sampler(object):
                         blob0 = None
 
         pbar = self._get_finite_pbar(progress, N)
+        iter = 0
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
+            iter += 1
             if pbar is not None:
                 pbar.update(1)
-                pbar.set_postfix_str("| Last step Acc Rate: {}".format(self.acceptance_fraction[-1]))
+                pbar.set_postfix_str("{}/{} Walkers Accepted| Last step Acc Rate: {}".format(np.count_nonzero(self.acceptance[iter]),
+                                                                                             self.nwalkers, self.acceptance_fraction[-1]))
 
         # Store the results for later continuation and toss out the blob
         self._last_run_mcmc_result = results[:3]
