@@ -14,7 +14,7 @@ from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 def dynamic_pbar_update(iter, test_size, acc, pbar=None):
     if pbar is not None:
-        pbar.set_postfix_str('| Single-Step Acceptence:{0} | Test Stepsize:{1} >= 16'.format(acc, test_size))
+        pbar.set_postfix_str('| Single-Step Acceptence Rate: {0} | Test Stepsize: {1} >= 16'.format(acc, test_size))
         pbar.update(iter - pbar.n)
 
 
@@ -184,9 +184,9 @@ class Sampler(object):
             import tqdm
             self.tqdm = tqdm
             if in_notebook():
-                pbar = self.tqdm.tqdm_notebook(desc="Burning in until constant Acc Rate", position=0, leave=True)
+                pbar = self.tqdm.tqdm_notebook(desc="Burning in until Constant Acceptence Rate", position=0, leave=True)
             else:
-                pbar = self.tqdm.tqdm(desc="Burning in until constant Acc Rate", position=0, leave=True)
+                pbar = self.tqdm.tqdm(desc="Burning in until Constant Acceptence Rate", position=0, leave=True)
         return pbar, dynamic_pbar_update
 
     def _get_finite_pbar(self, progress, N):
@@ -196,9 +196,9 @@ class Sampler(object):
                 import tqdm
                 self.tqdm = tqdm
             if in_notebook():
-                pbar = self.tqdm.tqdm_notebook(total=N, desc="running MCMC")
+                pbar = self.tqdm.tqdm_notebook(total=N, desc="Running MCMC")
             else:
-                pbar = self.tqdm.tqdm(total=N, desc="running MCMC")
+                pbar = self.tqdm.tqdm(total=N, desc="Running MCMC")
         return pbar
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
@@ -926,7 +926,7 @@ class Sampler(object):
             iter += 1
             if pbar is not None:
                 pbar.update(1)
-                pbar.set_postfix_str("{}/{} Walkers Accepted| Last step Acc Rate: {}".format(np.count_nonzero(self.acceptance[iter]),
+                pbar.set_postfix_str("| {}/{} Walkers Accepted | Last step Acc Rate: {}".format(np.count_nonzero(self.acceptance[iter]),
                                                                                              self.nwalkers, self.acceptance_fraction[-1]))
 
         # Store the results for later continuation and toss out the blob
