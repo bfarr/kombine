@@ -12,9 +12,10 @@ from scipy.stats import chisquare
 from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 
-def print_fn(iter, test_size, acc, pbar=None):
+def dynamic_pbar_update(iter, test_size, acc, pbar=None):
     if pbar is not None:
-        pbar.set_postfix_str('| single_step_acceptence = {0} | test_stepsize = {1} >= 16'.format(acc,test_size), refresh=False)
+        pbar.set_postfix_str('| single_step_acceptence = {0} | test_stepsize = {1} >= 16'.format(acc,test_size),
+                             refresh=False)
         pbar.update(iter - pbar.n)
 
 
@@ -187,7 +188,7 @@ class Sampler(object):
                 pbar = self.tqdm.tqdm_notebook(desc="Burning in until constant Acc Rate", position=0, leave=True)
             else:
                 pbar = self.tqdm.tqdm(desc="Burning in until constant Acc Rate", position=0, leave=True)
-        return pbar, print_fn
+        return pbar, dynamic_pbar_update
 
     def _get_finite_pbar(self, progress, N):
         pbar = None
@@ -267,7 +268,7 @@ class Sampler(object):
         if self._transd:
             freeze_transd = True
             self._burnin_spaces = ~p0.mask
-        pbar, print_func = self._get_dynamci_pbar(progress)
+        pbar, pbar_status = self._get_dynamci_pbar(progress)
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
@@ -315,7 +316,7 @@ class Sampler(object):
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
             sampling_ct += 1
-            print_func(sampling_ct, step_size, last_acc_rate, pbar)
+            pbar_status(sampling_ct, step_size, last_acc_rate, pbar)
 
             if verbose:
                 if ~np.isinf(max_iter):
