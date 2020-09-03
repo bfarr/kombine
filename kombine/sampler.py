@@ -13,7 +13,7 @@ from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 
 def print_fn(iter, test_size, acc, pbar):
-    pbar.set_postfix_str(f'| single_step_acceptence = {acc} | test_stepsize = {test_size} >= 16', refresh=False)
+    pbar.set_postfix_str('| single_step_acceptence = {0} | test_stepsize = {1} >= 16'.format(acc,test_size), refresh=False)
     pbar.update(iter - pbar.n)
 
 
@@ -923,7 +923,7 @@ class Sampler(object):
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
             if pbar is not None:
                 pbar.update(1)
-                pbar.set_postfix_str(f"| Last step Acc Rate: {self.acceptance_fraction[-1]}")
+                pbar.set_postfix_str("| Last step Acc Rate: {}".format(self.acceptance_fraction[-1]))
 
         # Store the results for later continuation and toss out the blob
         self._last_run_mcmc_result = results[:3]
