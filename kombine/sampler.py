@@ -151,6 +151,7 @@ class Sampler(object):
         self._lnprop = np.empty((0, self.nwalkers))
         self._acceptance = np.zeros((0, self.nwalkers))
         self._blobs = []
+        self.tqdm = None
 
         self._last_run_mcmc_result = None
         self._burnin_spaces = None
@@ -176,15 +177,28 @@ class Sampler(object):
 
                                      *self._lnpost_args)
 
-    def _get_print_fn(self, progress):
+    def _get_dynamci_pbar(self, progress):
         pbar = None
         if progress:
             import tqdm
+            self.tqdm = tqdm
             if in_notebook():
-                pbar = tqdm.tqdm_notebook(desc="Burning in until constant Acc Rate: ", position=0, leave=True)
+                pbar = self.tqdm.tqdm_notebook(desc="Burning in until constant Acc Rate", position=0, leave=True)
             else:
-                pbar = tqdm.tqdm(desc="Burning in until constant Acc Rate: ", position=0, leave=True)
+                pbar = self.tqdm.tqdm(desc="Burning in until constant Acc Rate", position=0, leave=True)
         return pbar, print_fn
+
+    def _get_finite_pbar(self, progress, N):
+        pbar = None
+        if progress:
+            if self.tqdm is None:
+                import tqdm
+                self.tqdm = tqdm
+            if in_notebook():
+                pbar = self.tqdm.tqdm_notebook(total=N, desc="running MCMC")
+            else:
+                pbar = self.tqdm.tqdm(total=N, desc="running MCMC")
+        return pbar
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                test_steps=16, critical_pval=0.05, max_steps=None,
@@ -252,10 +266,13 @@ class Sampler(object):
         if self._transd:
             freeze_transd = True
             self._burnin_spaces = ~p0.mask
-        pbar, print_func = self._get_print_fn(progress)
+        pbar, print_func = self._get_dynamci_pbar(progress)
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
+        if progress:
+            verbose = False
+
         sampling_ct = 0
         step_size = 2
         while step_size <= test_steps:
@@ -298,13 +315,15 @@ class Sampler(object):
             test_interval = max(test_interval, 1)
             sampling_ct += 1
             print_func(sampling_ct, step_size, last_acc_rate, pbar)
-            if progress and verbose:
+
+            if verbose:
                 if ~np.isinf(max_iter):
                     print("Time {} running mcmc during burnin with {}/{} Iterations and test_interval = {}:".format(
                         sampling_ct, self.iterations, max_iter, test_interval))
                 else:
                     print("Time {} running mcmc during burnin with test_interval = {}:".format(
                         sampling_ct, test_interval))
+
             results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
                                     freeze_transd=freeze_transd, spaces=self._burnin_spaces, progress=progress,
                                     **kwargs)
@@ -347,7 +366,7 @@ class Sampler(object):
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                iterations=1, kde=None, update_interval=None, kde_size=None,
-               freeze_transd=False, spaces=None, storechain=True, progress=False, **kwargs):
+               freeze_transd=False, spaces=None, storechain=True, **kwargs):
         """
         Advance the ensemble `iterations` steps as a generator.
 
@@ -900,13 +919,7 @@ class Sampler(object):
                     except IndexError:
                         blob0 = None
 
-        pbar = None
-        if progress and N > 0:
-            import tqdm
-            if in_notebook():
-                pbar = tqdm.tqdm_notebook(total=N, desc="running MCMC:")
-            else:
-                pbar = tqdm.tqdm(total=N, desc="running MCMC:")
+        pbar = self._get_finite_pbar(progress, N)
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
             if pbar is not None:
                 pbar.update(1)
@@ -914,6 +927,8 @@ class Sampler(object):
 
         # Store the results for later continuation and toss out the blob
         self._last_run_mcmc_result = results[:3]
+        if pbar is not None:
+            pbar.close()
         return results
 
     @property
