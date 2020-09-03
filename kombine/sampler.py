@@ -12,6 +12,16 @@ from scipy.stats import chisquare
 from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 
+def print_fn(iter, test_size, acc, pbar):
+    pbar.set_postfix_str(f'| single_step_acceptence = {acc} | test_stepsize = {test_size} >= 16', refresh=False)
+    pbar.update(iter - pbar.n)
+
+
+def in_notebook():
+    import __main__ as main
+    return not hasattr(main, '__file__')
+
+
 class _GetLnProbWrapper(object):
     """Convenience class for evaluating multiple probability densities at a single point."""
     def __init__(self, lnpost, kde, *args):
@@ -166,6 +176,16 @@ class Sampler(object):
 
                                      *self._lnpost_args)
 
+    def _get_print_fn(self, progress):
+        pbar = None
+        if progress:
+            import tqdm
+            if in_notebook():
+                pbar = tqdm.tqdm_notebook(desc="Burning in until constant Acc Rate: ", position=0, leave=True)
+            else:
+                pbar = tqdm.tqdm(desc="Burning in until constant Acc Rate: ", position=0, leave=True)
+        return pbar, print_fn
+
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                test_steps=16, critical_pval=0.05, max_steps=None,
                verbose=False, callback=None, progress=False, **kwargs):
@@ -227,13 +247,12 @@ class Sampler(object):
 
         # Determine the maximum iteration to look for
         start = self.iterations
-
         # Confine walkers to their space during burnin
         freeze_transd = False
         if self._transd:
             freeze_transd = True
             self._burnin_spaces = ~p0.mask
-
+        pbar, print_func = self._get_print_fn(progress)
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
@@ -278,8 +297,9 @@ class Sampler(object):
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
             sampling_ct += 1
+            print_func(sampling_ct, step_size, last_acc_rate, pbar)
             if progress and verbose:
-                if max_iter:
+                if ~np.isinf(max_iter):
                     print("Time {} running mcmc during burnin with {}/{} Iterations and test_interval = {}:".format(
                         sampling_ct, self.iterations, max_iter, test_interval))
                 else:
@@ -317,6 +337,8 @@ class Sampler(object):
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
 
         self._burnin_length = self.updates[-1]
+        if pbar is not None:
+            pbar.close()
 
         if blob is None:
             return p, lnpost, lnprop
@@ -444,14 +466,8 @@ class Sampler(object):
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
 
-        pbar = range(iterations)
-        if progress and iterations > 1:
-            try:
-                import tqdm
-                pbar = tqdm.tqdm(range(iterations))
-            except ImportError:
-                print("Must have tqdm installed on machine to print progress bars")
-        for i in pbar:
+
+        for i in range(iterations):
             try:
                 if freeze_transd and spaces is None:
                     spaces = ~p.mask
@@ -814,7 +830,7 @@ class Sampler(object):
         self._acceptance = self._acceptance[:iteration]
         self._blobs = self._blobs[:iteration]
 
-    def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None, **kwargs):
+    def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None, progress=False, **kwargs):
         """
         Iterate :meth:`sample` for `N` iterations and return the result.
 
@@ -884,12 +900,20 @@ class Sampler(object):
                     except IndexError:
                         blob0 = None
 
+        pbar = None
+        if progress and N > 0:
+            import tqdm
+            if in_notebook():
+                pbar = tqdm.tqdm_notebook(total=N, desc="running MCMC:")
+            else:
+                pbar = tqdm.tqdm(total=N, desc="running MCMC:")
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
-            pass
+            if pbar is not None:
+                pbar.update(1)
+                pbar.set_postfix_str(f"| Last step Acc Rate: {self.acceptance_fraction[-1]}")
 
         # Store the results for later continuation and toss out the blob
         self._last_run_mcmc_result = results[:3]
-
         return results
 
     @property
