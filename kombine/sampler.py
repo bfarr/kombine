@@ -184,10 +184,10 @@ class Sampler(object):
             import tqdm
             self.tqdm = tqdm
             if in_notebook():
-                pbar = self.tqdm.tqdm_notebook(desc="Burning in until Constant Acceptence Rate", position=0, leave=True,
+                pbar = self.tqdm.tqdm_notebook(desc="Burning in until Constant Acceptence Rate over {} ACLs".format(t), position=0, leave=True,
                                                total=t)
             else:
-                pbar = self.tqdm.tqdm(desc="Burning in until Constant Acceptence Rate", position=0, leave=True,
+                pbar = self.tqdm.tqdm(desc="Burning in until Constant Acceptence Rate over {} ACLs".format(t), position=0, leave=True,
                                       total=t)
         return pbar, dynamic_pbar_update
 
