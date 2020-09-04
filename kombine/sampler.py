@@ -318,7 +318,6 @@ class Sampler(object):
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
             sampling_ct += 1
-            pbar_status(step_size, last_step_size, last_acc_rate, pbar)
 
             if verbose:
                 if ~np.isinf(max_iter):
@@ -339,6 +338,8 @@ class Sampler(object):
 
             if callback is not None:
                 callback(self)
+
+            pbar_status(step_size, last_step_size, last_acc_rate, pbar)
 
             # Quit if we hit the max
             if self.iterations >= max_iter:
@@ -925,13 +926,13 @@ class Sampler(object):
                         blob0 = None
 
         pbar = self._get_finite_pbar(progress, N)
-        iter = self.iterations
+        it = self.iterations
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
             if pbar is not None:
                 pbar.update(1)
-                pbar.set_postfix_str("| {}/{} Walkers Accepted | Last step Acc Rate: {}".format(np.count_nonzero(self.acceptance[iter]),
-                                                                                             self.nwalkers, self.acceptance_fraction[-1]))
-                iter += 1
+                pbar.set_postfix_str("| {}/{} Walkers Accepted | Last step Acc Rate: {}".format(np.count_nonzero(self.acceptance[it]),
+                                                                                             self.nwalkers, self.acceptance_fraction[it]))
+                it += 1
 
         # Store the results for later continuation and toss out the blob
         self._last_run_mcmc_result = results[:3]
