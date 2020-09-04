@@ -339,7 +339,6 @@ class Sampler(object):
             if callback is not None:
                 callback(self)
 
-            pbar_status(step_size, last_step_size, last_acc_rate, pbar)
 
             # Quit if we hit the max
             if self.iterations >= max_iter:
@@ -350,6 +349,7 @@ class Sampler(object):
             if self.consistent_acceptance_rate(window_size=step_size*act, critical_pval=critical_pval):
                 if verbose:
                     print('Acceptance rate constant over ', step_size, ' ACTs')
+                pbar_status(step_size, last_step_size, last_acc_rate, pbar)
                 last_step_size = step_size
                 step_size *= 2
             else:
