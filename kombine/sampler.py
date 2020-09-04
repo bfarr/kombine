@@ -14,7 +14,7 @@ from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 def dynamic_pbar_update(step_size, last_step_size, acc, pbar=None):
     if pbar is not None:
-        pbar.set_postfix_str('| Single-Step Acceptence Rate: {0}'.format(acc))
+        pbar.set_postfix_str('| Single-Step Acceptence Rate: {0:.3f}'.format(acc))
         pbar.update(step_size-last_step_size)
 
 
@@ -930,7 +930,7 @@ class Sampler(object):
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
             if pbar is not None:
                 pbar.update(1)
-                pbar.set_postfix_str("| {}/{} Walkers Accepted | Last step Acc Rate: {}".format(np.count_nonzero(self.acceptance[it]),
+                pbar.set_postfix_str("| {0}/{1} Walkers Accepted | Last step Acc Rate: {2:.3f}".format(np.count_nonzero(self.acceptance[it]),
                                                                                              self.nwalkers, self.acceptance_fraction[it]))
                 it += 1
 
