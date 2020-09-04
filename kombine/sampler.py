@@ -12,10 +12,10 @@ from scipy.stats import chisquare
 from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 
-def dynamic_pbar_update(iter, test_size, acc, pbar=None):
+def dynamic_pbar_update(step_size, last_step_size, acc, pbar=None):
     if pbar is not None:
-        pbar.set_postfix_str('| Single-Step Acceptence Rate: {0} | Test Stepsize: {1} >= 16'.format(acc, test_size))
-        pbar.update(iter - pbar.n)
+        pbar.set_postfix_str('| Single-Step Acceptence Rate: {0}'.format(acc))
+        pbar.update(step_size-last_step_size)
 
 
 def in_notebook():
@@ -178,15 +178,17 @@ class Sampler(object):
 
                                      *self._lnpost_args)
 
-    def _get_dynamci_pbar(self, progress):
+    def _get_dynamci_pbar(self, progress, t):
         pbar = None
         if progress:
             import tqdm
             self.tqdm = tqdm
             if in_notebook():
-                pbar = self.tqdm.tqdm_notebook(desc="Burning in until Constant Acceptence Rate", position=0, leave=True)
+                pbar = self.tqdm.tqdm_notebook(desc="Burning in until Constant Acceptence Rate", position=0, leave=True,
+                                               total=t)
             else:
-                pbar = self.tqdm.tqdm(desc="Burning in until Constant Acceptence Rate", position=0, leave=True)
+                pbar = self.tqdm.tqdm(desc="Burning in until Constant Acceptence Rate", position=0, leave=True,
+                                      total=t)
         return pbar, dynamic_pbar_update
 
     def _get_finite_pbar(self, progress, N):
@@ -267,7 +269,7 @@ class Sampler(object):
         if self._transd:
             freeze_transd = True
             self._burnin_spaces = ~p0.mask
-        pbar, pbar_status = self._get_dynamci_pbar(progress)
+        pbar, pbar_status = self._get_dynamci_pbar(progress, test_steps)
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
@@ -276,6 +278,7 @@ class Sampler(object):
 
         sampling_ct = 0
         step_size = 2
+        last_step_size = 0
         while step_size <= test_steps:
             # Update the proposal
             if p0 is not None:
@@ -315,7 +318,7 @@ class Sampler(object):
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
             sampling_ct += 1
-            pbar_status(sampling_ct, step_size, last_acc_rate, pbar)
+            pbar_status(step_size, last_step_size, last_acc_rate, pbar)
 
             if verbose:
                 if ~np.isinf(max_iter):
@@ -346,6 +349,7 @@ class Sampler(object):
             if self.consistent_acceptance_rate(window_size=step_size*act, critical_pval=critical_pval):
                 if verbose:
                     print('Acceptance rate constant over ', step_size, ' ACTs')
+                last_step_size = step_size
                 step_size *= 2
             else:
                 if verbose:
