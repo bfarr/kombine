@@ -242,6 +242,12 @@ class Sampler(object):
         :param verbose: (optional)
             Print status messages each time a milestone is reached in the burnin.
 
+        :param callback: (optional)
+            Callback to use (default to None)
+
+        :param progress: (optional)
+            Boolean flag to report progress of burnin() / MCMC steps through a progress bar. Needs tqdm installed
+
         :param kwargs: (optional)
             The rest is passed to :meth:`run_mcmc`.
 
@@ -338,7 +344,6 @@ class Sampler(object):
 
             if callback is not None:
                 callback(self)
-
 
             # Quit if we hit the max
             if self.iterations >= max_iter:
@@ -490,7 +495,6 @@ class Sampler(object):
 
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
-
 
         for i in range(iterations):
             try:
@@ -876,6 +880,9 @@ class Sampler(object):
 
         :param blob0: (optional)
             The list of blob data for walkers at positions `p0`.
+
+        :param progress: (optional)
+            Boolean flag to turn on progress bar reporting through MCMC iterations
 
         :param kwargs: (optional)
             The rest is passed to :meth:`sample`.
