@@ -6,6 +6,8 @@ Unit tests for nose.
 
 from __future__ import division
 
+import unittest
+
 import numpy as np
 from scipy.stats import multivariate_normal
 
@@ -102,7 +104,7 @@ def test_optimized_kde():
 log_threshold = -3
 std_threshold = 3
 
-class TestSampler:
+class TestSampler(unittest.TestCase):
     def setUp(self):
         self.nwalkers = 128
         self.ndim = 3
