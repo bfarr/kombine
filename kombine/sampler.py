@@ -12,6 +12,17 @@ from scipy.stats import chisquare
 from .clustered_kde import optimized_kde, TransdimensionalKDE
 
 
+def dynamic_pbar_update(step_size, last_step_size, acc, pbar=None):
+    if pbar is not None:
+        pbar.set_postfix_str('| Single-Step Acceptence Rate: {0:.3f}'.format(acc))
+        pbar.update(step_size-last_step_size)
+
+
+def in_notebook():
+    import __main__ as main
+    return not hasattr(main, '__file__')
+
+
 class _GetLnProbWrapper(object):
     """Convenience class for evaluating multiple probability densities at a single point."""
     def __init__(self, lnpost, kde, *args):
@@ -141,6 +152,7 @@ class Sampler(object):
         self._lnprop = np.empty((0, self.nwalkers))
         self._acceptance = np.zeros((0, self.nwalkers))
         self._blobs = []
+        self.tqdm = None
 
         self._last_run_mcmc_result = None
         self._burnin_spaces = None
@@ -165,6 +177,31 @@ class Sampler(object):
             return _GetLnProbWrapper(self._get_lnpost, self._kde,
 
                                      *self._lnpost_args)
+
+    def _get_dynamci_pbar(self, progress, t):
+        pbar = None
+        if progress:
+            import tqdm
+            self.tqdm = tqdm
+            if in_notebook():
+                pbar = self.tqdm.tqdm_notebook(desc="Burning in until Const Acc Rate over {} ACLs".format(t), position=0, leave=True,
+                                               total=t)
+            else:
+                pbar = self.tqdm.tqdm(desc="Burning in until Const Acc Rate over {} ACLs".format(t), position=0, leave=True,
+                                      total=t)
+        return pbar, dynamic_pbar_update
+
+    def _get_finite_pbar(self, progress, N):
+        pbar = None
+        if progress:
+            if self.tqdm is None:
+                import tqdm
+                self.tqdm = tqdm
+            if in_notebook():
+                pbar = self.tqdm.tqdm_notebook(total=N, desc="Running MCMC")
+            else:
+                pbar = self.tqdm.tqdm(total=N, desc="Running MCMC")
+        return pbar
 
     def burnin(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                test_steps=16, critical_pval=0.05, max_steps=None,
@@ -205,6 +242,12 @@ class Sampler(object):
         :param verbose: (optional)
             Print status messages each time a milestone is reached in the burnin.
 
+        :param callback: (optional)
+            Callback to use (default to None)
+
+        :param progress: (optional)
+            Boolean flag to report progress of burnin() / MCMC steps through a progress bar. Needs tqdm installed
+
         :param kwargs: (optional)
             The rest is passed to :meth:`run_mcmc`.
 
@@ -227,18 +270,21 @@ class Sampler(object):
 
         # Determine the maximum iteration to look for
         start = self.iterations
-
         # Confine walkers to their space during burnin
         freeze_transd = False
         if self._transd:
             freeze_transd = True
             self._burnin_spaces = ~p0.mask
-
+        pbar, pbar_status = self._get_dynamci_pbar(progress, test_steps)
         max_iter = np.inf
         if max_steps is not None:
             max_iter = start + max_steps
+        if progress:
+            verbose = False
+
         sampling_ct = 0
         step_size = 2
+        last_step_size = 0
         while step_size <= test_steps:
             # Update the proposal
             if p0 is not None:
@@ -278,13 +324,15 @@ class Sampler(object):
             # Make sure we're taking at least one step
             test_interval = max(test_interval, 1)
             sampling_ct += 1
-            if progress and verbose:
-                if max_iter:
+
+            if verbose:
+                if ~np.isinf(max_iter):
                     print("Time {} running mcmc during burnin with {}/{} Iterations and test_interval = {}:".format(
                         sampling_ct, self.iterations, max_iter, test_interval))
                 else:
                     print("Time {} running mcmc during burnin with test_interval = {}:".format(
                         sampling_ct, test_interval))
+
             results = self.run_mcmc(test_interval, p, lnpost, lnprop, blob,
                                     freeze_transd=freeze_transd, spaces=self._burnin_spaces, progress=progress,
                                     **kwargs)
@@ -306,6 +354,8 @@ class Sampler(object):
             if self.consistent_acceptance_rate(window_size=step_size*act, critical_pval=critical_pval):
                 if verbose:
                     print('Acceptance rate constant over ', step_size, ' ACTs')
+                pbar_status(step_size, last_step_size, last_acc_rate, pbar)
+                last_step_size = step_size
                 step_size *= 2
             else:
                 if verbose:
@@ -317,6 +367,8 @@ class Sampler(object):
             p0, lnpost0, lnprop0, blob0 = p, lnpost, lnprop, blob
 
         self._burnin_length = self.updates[-1]
+        if pbar is not None:
+            pbar.close()
 
         if blob is None:
             return p, lnpost, lnprop
@@ -325,7 +377,7 @@ class Sampler(object):
 
     def sample(self, p0=None, lnpost0=None, lnprop0=None, blob0=None,
                iterations=1, kde=None, update_interval=None, kde_size=None,
-               freeze_transd=False, spaces=None, storechain=True, progress=False, **kwargs):
+               freeze_transd=False, spaces=None, storechain=True, **kwargs):
         """
         Advance the ensemble `iterations` steps as a generator.
 
@@ -444,14 +496,7 @@ class Sampler(object):
             self._lnpost = np.concatenate((self._lnpost, np.zeros((iterations, self.nwalkers))))
             self._lnprop = np.concatenate((self._lnprop, np.zeros((iterations, self.nwalkers))))
 
-        pbar = range(iterations)
-        if progress and iterations > 1:
-            try:
-                import tqdm
-                pbar = tqdm.tqdm(range(iterations))
-            except ImportError:
-                print("Must have tqdm installed on machine to print progress bars")
-        for i in pbar:
+        for i in range(iterations):
             try:
                 if freeze_transd and spaces is None:
                     spaces = ~p.mask
@@ -814,7 +859,7 @@ class Sampler(object):
         self._acceptance = self._acceptance[:iteration]
         self._blobs = self._blobs[:iteration]
 
-    def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None, **kwargs):
+    def run_mcmc(self, N, p0=None, lnpost0=None, lnprop0=None, blob0=None, progress=False, **kwargs):
         """
         Iterate :meth:`sample` for `N` iterations and return the result.
 
@@ -835,6 +880,9 @@ class Sampler(object):
 
         :param blob0: (optional)
             The list of blob data for walkers at positions `p0`.
+
+        :param progress: (optional)
+            Boolean flag to turn on progress bar reporting through MCMC iterations
 
         :param kwargs: (optional)
             The rest is passed to :meth:`sample`.
@@ -884,12 +932,19 @@ class Sampler(object):
                     except IndexError:
                         blob0 = None
 
+        pbar = self._get_finite_pbar(progress, N)
+        it = self.iterations
         for results in self.sample(p0, lnpost0, lnprop0, blob0, N, **kwargs):
-            pass
+            if pbar is not None:
+                pbar.update(1)
+                pbar.set_postfix_str("| {0}/{1} Walkers Accepted | Last step Acc Rate: {2:.3f}".format(np.count_nonzero(self.acceptance[it]),
+                                                                                             self.nwalkers, self.acceptance_fraction[it]))
+                it += 1
 
         # Store the results for later continuation and toss out the blob
         self._last_run_mcmc_result = results[:3]
-
+        if pbar is not None:
+            pbar.close()
         return results
 
     @property
