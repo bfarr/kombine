@@ -130,7 +130,7 @@ class Sampler(object):
         self.mpi = mpi
         self.processes = processes
         if processes is None and pool is not None:
-            raise ValueError("Please provide the number of processes if "
+            raise ValueError("Please provide the number of processes"
                              " if also providing a pool instance.")
         self._managing_pool = False
         if pool is not None:
